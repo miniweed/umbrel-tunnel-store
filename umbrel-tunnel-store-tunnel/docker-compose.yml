@@ -1,6 +1,10 @@
 networks:
   default:
     name: umbrel-tunnel-store-tunnel_default
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.21.22.0/24
 
 services:
 
