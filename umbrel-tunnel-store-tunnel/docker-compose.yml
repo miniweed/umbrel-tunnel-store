@@ -6,7 +6,7 @@ services:
 
   app_proxy:
     environment:
-      APP_HOST: umbrel-tunnel-store-tunnel_web_1
+      APP_HOST: web
       APP_PORT: 3000
       PROXY_AUTH_ADD: "true"
 
