@@ -1,7 +1,3 @@
-networks:
-  default:
-    name: umbrel-tunnel-store-tunnel_default
-
 services:
 
   app_proxy:
