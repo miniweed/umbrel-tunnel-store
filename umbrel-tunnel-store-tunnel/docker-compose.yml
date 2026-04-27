@@ -1,0 +1,58 @@
+networks:
+  default:
+    name: umbrel-tunnel-store-tunnel_default
+
+services:
+
+  app_proxy:
+    environment:
+      APP_HOST: umbrel-tunnel-store-tunnel_web_1
+      APP_PORT: 3000
+      PROXY_AUTH_ADD: "true"
+
+  web:
+    image: ghcr.io/miniweed/umbrel-tunnel-web:1.0.0@sha256:6092ef61bf242d5e751e45d1ef8a2b6197aa273b5b66c935e6cb8bf6640bd84d
+    restart: on-failure
+    stop_grace_period: 30s
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+    environment:
+      - DATA_DIR=/data
+      - WG_API_HOST=wg
+    depends_on:
+      - wg
+    networks:
+      default:
+        ipv4_address: 10.21.22.2
+
+  wg:
+    image: ghcr.io/miniweed/umbrel-tunnel-wg:1.0.0@sha256:de7a6405e3b43b11db4425b4f260fae44aa4f39db2224b7020665ec4d08c1043
+    restart: on-failure
+    stop_grace_period: 30s
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+    networks:
+      default:
+        ipv4_address: 10.21.22.3
+
+  caddy:
+    image: caddy:2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d
+    network_mode: service:wg
+    restart: on-failure
+    stop_grace_period: 30s
+    command: >
+      sh -c "until [ -f /data/Caddyfile ]; do sleep 1; done;
+             caddy run --config /data/Caddyfile --adapter caddyfile --watch"
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+    environment:
+      - XDG_DATA_HOME=/data/caddy
+      - XDG_CONFIG_HOME=/data/caddy-config
+    depends_on:
+      - wg
+      - web

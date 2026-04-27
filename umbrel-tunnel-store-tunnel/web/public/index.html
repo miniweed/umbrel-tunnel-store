@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Umbrel Tunnel</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0d0d0d;
+    color: #e5e5e5;
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+
+  .container { max-width: 760px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .header-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, #5b21b6, #7c3aed);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .status-badge {
+    margin-left: auto;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .status-badge .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+  }
+  .badge-connected { background: #14532d; color: #4ade80; }
+  .badge-connected .dot { background: #4ade80; }
+  .badge-disconnected { background: #2d1515; color: #f87171; }
+  .badge-disconnected .dot { background: #f87171; }
+  .badge-waiting { background: #1c1c1c; color: #9ca3af; }
+  .badge-waiting .dot { background: #9ca3af; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+  .tab {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    color: #9ca3af;
+    background: transparent;
+    border: none;
+    transition: background 0.15s, color 0.15s;
+  }
+  .tab:hover { background: #1c1c1c; color: #e5e5e5; }
+  .tab.active { background: #1c1c1c; color: #e5e5e5; }
+
+  /* Cards */
+  .card {
+    background: #161616;
+    border: 1px solid #262626;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 16px;
+  }
+
+  /* Form */
+  .field { margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: #9ca3af; margin-bottom: 6px; }
+  input[type=text], input[type=email], input[type=number] {
+    width: 100%;
+    background: #0d0d0d;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #e5e5e5;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus { border-color: #7c3aed; }
+  input[readonly] { color: #6b7280; cursor: default; }
+
+  .row { display: grid; grid-template-columns: 1fr 120px; gap: 12px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: #7c3aed; color: #fff; }
+  .btn-secondary { background: #262626; color: #e5e5e5; }
+  .btn-danger { background: #7f1d1d; color: #fca5a5; }
+  .btn-sm { padding: 6px 12px; font-size: 13px; }
+
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+
+  /* Services table */
+  .services-list { display: flex; flex-direction: column; gap: 10px; }
+  .service-item {
+    display: grid;
+    grid-template-columns: 1fr 130px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 12px;
+    background: #0d0d0d;
+    border: 1px solid #262626;
+    border-radius: 8px;
+  }
+  .service-item input { background: #161616; }
+  .toggle {
+    position: relative; display: inline-block; width: 40px; height: 22px;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0;
+    background: #333; border-radius: 22px; cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle-slider::before {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: transform 0.2s;
+  }
+  .toggle input:checked + .toggle-slider { background: #7c3aed; }
+  .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+  /* Code block */
+  .code-block {
+    background: #0d0d0d;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 14px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    color: #a3e635;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  /* Status raw */
+  .status-raw {
+    font-family: monospace;
+    font-size: 12px;
+    color: #6b7280;
+    background: #0d0d0d;
+    border-radius: 8px;
+    padding: 12px;
+    white-space: pre-wrap;
+    margin-top: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  /* URL pill */
+  .url-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #1c1c1c;
+    border: 1px solid #333;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #a78bfa;
+    font-family: monospace;
+  }
+
+  /* Step indicator */
+  .steps { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .step {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; color: #4b5563;
+  }
+  .step.active { color: #a78bfa; }
+  .step.done { color: #4ade80; }
+  .step-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+    background: #1c1c1c; color: #4b5563;
+    flex-shrink: 0;
+  }
+  .step.active .step-num { background: #5b21b6; color: #fff; }
+  .step.done .step-num { background: #14532d; color: #4ade80; }
+  .step-sep { color: #333; font-size: 12px; }
+
+  /* Alert */
+  .alert {
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .alert-info { background: #1e1b4b; color: #a5b4fc; border: 1px solid #3730a3; }
+  .alert-success { background: #14532d; color: #86efac; border: 1px solid #166534; }
+  .alert-warn { background: #451a03; color: #fdba74; border: 1px solid #92400e; }
+
+  .hidden { display: none !important; }
+  .text-sm { font-size: 13px; color: #6b7280; }
+  .mt-2 { margin-top: 8px; }
+  .mt-4 { margin-top: 16px; }
+
+  /* Spinner */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid #7c3aed;
+    border-top-color: transparent; border-radius: 50%;
+    animation: spin 0.6s linear infinite; display: inline-block;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="header-icon">🔒</div>
+    <h1>Umbrel Tunnel</h1>
+    <div id="status-badge" class="status-badge badge-waiting">
+      <div class="dot"></div>
+      <span id="status-text">Comprobando...</span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('dashboard')">Panel</button>
+    <button class="tab" onclick="showTab('config')">Configuración</button>
+    <button class="tab" onclick="showTab('vps')">Setup VPS</button>
+  </div>
+
+  <!-- ═══ PANEL ════════════════════════════════════════════════════════════ -->
+  <div id="tab-dashboard">
+
+    <div id="setup-wizard" class="hidden">
+      <div class="alert alert-info">
+        Primera configuración necesaria. Ve a <strong>Configuración</strong> para empezar.
+      </div>
+    </div>
+
+    <div id="tunnel-status-card" class="card">
+      <div class="card-title">Estado del túnel</div>
+      <div id="status-raw" class="status-raw">Cargando...</div>
+    </div>
+
+    <div id="services-status" class="card hidden">
+      <div class="card-title">Servicios expuestos</div>
+      <div id="services-urls"></div>
+    </div>
+
+  </div>
+
+  <!-- ═══ CONFIGURACIÓN ════════════════════════════════════════════════════ -->
+  <div id="tab-config" class="hidden">
+
+    <div class="card">
+      <div class="card-title">Claves WireGuard</div>
+      <div class="field">
+        <label>Clave pública de Umbrel (para copiar al VPS)</label>
+        <input type="text" id="publicKey" readonly placeholder="Genera las claves primero">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="generateKeys()">
+          <span id="keygen-spinner" class="spinner hidden"></span>
+          Generar nuevas claves
+        </button>
+      </div>
+      <p class="text-sm mt-2">La clave privada se guarda de forma segura en el servidor y nunca se muestra.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Servidor VPS</div>
+      <div class="field">
+        <label>IP pública del VPS</label>
+        <input type="text" id="vpsIp" placeholder="123.45.67.89">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Puerto WireGuard del VPS</label>
+          <input type="number" id="vpsPort" value="51820" min="1" max="65535">
+        </div>
+      </div>
+      <div class="field">
+        <label>Clave pública del VPS <span class="text-sm">(obtenida al ejecutar el script de setup)</span></label>
+        <input type="text" id="vpsPubKey" placeholder="Pega aquí la clave pública del VPS">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Dominio y HTTPS</div>
+      <div class="alert alert-info">
+        Apunta tu dominio a la IP del VPS antes de guardar. Caddy obtendrá el certificado Let's Encrypt automáticamente.
+      </div>
+      <div class="field">
+        <label>Dominio principal (ej: home.tudominio.com)</label>
+        <input type="text" id="domain" placeholder="home.tudominio.com">
+      </div>
+      <div class="field">
+        <label>Email para Let's Encrypt</label>
+        <input type="email" id="acmeEmail" placeholder="tu@email.com">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Servicios a exponer</div>
+      <p class="text-sm" style="margin-bottom:14px">
+        Cada servicio necesita un subdominio y la URL interna de Umbrel (IP o nombre del contenedor).
+      </p>
+      <div id="services-list" class="services-list"></div>
+      <button class="btn btn-secondary mt-4" onclick="addService()">+ Añadir servicio</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveConfig()">
+        <span id="save-spinner" class="spinner hidden"></span>
+        Guardar configuración
+      </button>
+      <span id="save-msg" class="text-sm" style="align-self:center"></span>
+    </div>
+
+  </div>
+
+  <!-- ═══ VPS SETUP ═════════════════════════════════════════════════════════ -->
+  <div id="tab-vps" class="hidden">
+
+    <div class="card">
+      <div class="card-title">Script de instalación del VPS</div>
+      <p class="text-sm" style="margin-bottom:14px">
+        Ejecuta este script como root en tu VPS (Debian/Ubuntu). Al terminar te mostrará
+        la <strong>clave pública del VPS</strong> que debes pegar en Configuración.
+      </p>
+      <div id="vps-script-placeholder" class="alert alert-warn">
+        Configura la IP del VPS y genera las claves primero.
+      </div>
+      <div id="vps-script-block" class="hidden">
+        <div class="code-block" id="vps-script-code"></div>
+        <div class="btn-row mt-2">
+          <button class="btn btn-secondary btn-sm" onclick="copyScript()">Copiar script</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Pasos de configuración</div>
+      <div class="steps">
+        <div class="step" id="step-1">
+          <div class="step-num">1</div>
+          <span>Generar claves</span>
+        </div>
+        <div class="step-sep">→</div>
+        <div class="step" id="step-2">
+          <div class="step-num">2</div>
+          <span>Configurar VPS IP</span>
+        </div>
+        <div class="step-sep">→</div>
+        <div class="step" id="step-3">
+          <div class="step-num">3</div>
+          <span>Ejecutar script en VPS</span>
+        </div>
+        <div class="step-sep">→</div>
+        <div class="step" id="step-4">
+          <div class="step-num">4</div>
+          <span>Pegar clave VPS</span>
+        </div>
+        <div class="step-sep">→</div>
+        <div class="step" id="step-5">
+          <div class="step-num">5</div>
+          <span>Guardar y listo</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+let cfg = {};
+
+// ── Tab navigation ────────────────────────────────────────────────────────────
+function showTab(name) {
+  ['dashboard','config','vps'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('hidden', t !== name);
+  });
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', ['dashboard','config','vps'][i] === name);
+  });
+  if (name === 'vps') loadVpsScript();
+}
+
+// ── Load config from server ───────────────────────────────────────────────────
+async function loadConfig() {
+  const res = await fetch('/api/config');
+  cfg = await res.json();
+
+  document.getElementById('publicKey').value = cfg.publicKey || '';
+  document.getElementById('vpsIp').value = cfg.vpsIp || '';
+  document.getElementById('vpsPort').value = cfg.vpsPort || 51820;
+  document.getElementById('vpsPubKey').value = cfg.vpsPubKey || '';
+  document.getElementById('domain').value = cfg.domain || '';
+  document.getElementById('acmeEmail').value = cfg.acmeEmail || '';
+
+  renderServices();
+  updateSteps();
+  updateServicesStatus();
+
+  if (!cfg.publicKey || !cfg.vpsPubKey || !cfg.vpsIp) {
+    document.getElementById('setup-wizard').classList.remove('hidden');
+  }
+}
+
+// ── Save config ───────────────────────────────────────────────────────────────
+async function saveConfig() {
+  const spinner = document.getElementById('save-spinner');
+  const msg = document.getElementById('save-msg');
+  spinner.classList.remove('hidden');
+  msg.textContent = '';
+
+  const services = [...document.querySelectorAll('.service-item')].map(el => ({
+    name: el.querySelector('.svc-name').value.trim(),
+    subdomain: el.querySelector('.svc-subdomain').value.trim(),
+    target: el.querySelector('.svc-target').value.trim(),
+    enabled: el.querySelector('.svc-toggle').checked
+  })).filter(s => s.name || s.target);
+
+  const payload = {
+    vpsIp: document.getElementById('vpsIp').value.trim(),
+    vpsPort: parseInt(document.getElementById('vpsPort').value) || 51820,
+    vpsPubKey: document.getElementById('vpsPubKey').value.trim(),
+    domain: document.getElementById('domain').value.trim(),
+    acmeEmail: document.getElementById('acmeEmail').value.trim(),
+    privateKey: '••••',  // server keeps the private key
+    services
+  };
+
+  const res = await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  spinner.classList.add('hidden');
+  if (res.ok) {
+    msg.textContent = 'Guardado. El túnel se reconfigura automáticamente.';
+    msg.style.color = '#4ade80';
+    await loadConfig();
+  } else {
+    msg.textContent = 'Error al guardar.';
+    msg.style.color = '#f87171';
+  }
+}
+
+// ── Generate WireGuard keys ───────────────────────────────────────────────────
+async function generateKeys() {
+  const spinner = document.getElementById('keygen-spinner');
+  spinner.classList.remove('hidden');
+  try {
+    const res = await fetch('/api/keygen');
+    const data = await res.json();
+    if (data.publicKey) {
+      cfg.publicKey = data.publicKey;
+      document.getElementById('publicKey').value = data.publicKey;
+      updateSteps();
+    } else {
+      alert(data.error || 'Error al generar claves');
+    }
+  } catch (e) {
+    alert('WireGuard no disponible todavía. Espera un momento y vuelve a intentarlo.');
+  }
+  spinner.classList.add('hidden');
+}
+
+// ── Services ──────────────────────────────────────────────────────────────────
+function renderServices() {
+  const list = document.getElementById('services-list');
+  list.innerHTML = '';
+  (cfg.services || []).forEach((svc, i) => addServiceRow(svc, i));
+}
+
+function addService() {
+  cfg.services = cfg.services || [];
+  addServiceRow({ name: '', subdomain: '', target: '', enabled: true }, cfg.services.length);
+}
+
+function addServiceRow(svc, i) {
+  const list = document.getElementById('services-list');
+  const el = document.createElement('div');
+  el.className = 'service-item';
+  el.innerHTML = `
+    <input class="svc-name" type="text" placeholder="Nombre (ej: Nextcloud)" value="${esc(svc.name||'')}">
+    <input class="svc-subdomain" type="text" placeholder="Subdominio" value="${esc(svc.subdomain||'')}">
+    <input class="svc-target" type="text" placeholder="http://IP:puerto" value="${esc(svc.target||'')}">
+    <label class="toggle"><input type="checkbox" class="svc-toggle" ${svc.enabled?'checked':''}><span class="toggle-slider"></span></label>
+    <button class="btn btn-danger btn-sm" onclick="this.closest('.service-item').remove()">✕</button>
+  `;
+  // re-add: fix grid cols to 5
+  el.style.gridTemplateColumns = '1fr 120px 1fr 44px auto';
+  list.appendChild(el);
+}
+
+function updateServicesStatus() {
+  const card = document.getElementById('services-status');
+  const urlsDiv = document.getElementById('services-urls');
+  const enabled = (cfg.services || []).filter(s => s.enabled && s.target);
+  if (!cfg.domain || !enabled.length) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  urlsDiv.innerHTML = enabled.map(svc => {
+    const host = svc.subdomain ? `${svc.subdomain}.${cfg.domain}` : cfg.domain;
+    return `<div style="margin-bottom:8px">
+      <span style="font-size:13px;color:#9ca3af;margin-right:8px">${esc(svc.name||svc.target)}</span>
+      <span class="url-pill">🔗 https://${esc(host)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── VPS script ────────────────────────────────────────────────────────────────
+async function loadVpsScript() {
+  const block = document.getElementById('vps-script-block');
+  const placeholder = document.getElementById('vps-script-placeholder');
+  try {
+    const res = await fetch('/api/vps-setup');
+    if (!res.ok) { block.classList.add('hidden'); placeholder.classList.remove('hidden'); return; }
+    const data = await res.json();
+    document.getElementById('vps-script-code').textContent = data.script;
+    block.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+  } catch {
+    block.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+  }
+}
+
+function copyScript() {
+  const code = document.getElementById('vps-script-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = event.target;
+    btn.textContent = 'Copiado!';
+    setTimeout(() => btn.textContent = 'Copiar script', 2000);
+  });
+}
+
+// ── Steps indicator ───────────────────────────────────────────────────────────
+function updateSteps() {
+  const hasKeys = !!cfg.publicKey;
+  const hasVpsIp = !!cfg.vpsIp;
+  const hasVpsPub = !!cfg.vpsPubKey;
+  const hasConfig = !!(cfg.domain && cfg.acmeEmail);
+
+  setStep(1, hasKeys);
+  setStep(2, hasKeys && hasVpsIp);
+  setStep(3, hasKeys && hasVpsIp);
+  setStep(4, hasKeys && hasVpsIp && hasVpsPub);
+  setStep(5, hasKeys && hasVpsIp && hasVpsPub && hasConfig);
+}
+
+function setStep(n, done) {
+  const el = document.getElementById('step-' + n);
+  el.classList.toggle('done', done);
+  el.classList.toggle('active', !done);
+}
+
+// ── Status polling ────────────────────────────────────────────────────────────
+async function pollStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    const badge = document.getElementById('status-badge');
+    const text = document.getElementById('status-text');
+    const raw = document.getElementById('status-raw');
+
+    if (data.connected) {
+      badge.className = 'status-badge badge-connected';
+      text.textContent = 'Conectado';
+    } else if (data.raw && data.raw.includes('wg0')) {
+      badge.className = 'status-badge badge-waiting';
+      text.textContent = 'Conectando...';
+    } else {
+      badge.className = 'status-badge badge-disconnected';
+      text.textContent = 'Sin túnel';
+    }
+    raw.textContent = data.raw || 'Sin información';
+  } catch {
+    document.getElementById('status-text').textContent = 'Error';
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadConfig();
+pollStatus();
+setInterval(pollStatus, 8000);
+</script>
+</body>
+</html>

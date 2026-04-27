@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5b21b6"/>
+      <stop offset="100%" style="stop-color:#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="52" fill="url(#bg)"/>
+  <!-- Tunnel arcs -->
+  <path d="M 56 128 Q 56 72 128 72 Q 200 72 200 128 Q 200 184 128 184 Q 56 184 56 128 Z"
+        fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="8"/>
+  <path d="M 80 128 Q 80 96 128 96 Q 176 96 176 128 Q 176 160 128 160 Q 80 160 80 128 Z"
+        fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="8"/>
+  <!-- Arrow through tunnel -->
+  <line x1="72" y1="128" x2="184" y2="128" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <polygon points="184,128 166,116 166,140" fill="white"/>
+  <!-- Lock icon -->
+  <rect x="112" y="116" width="32" height="24" rx="4" fill="white"/>
+  <path d="M 118 116 L 118 108 Q 118 100 128 100 Q 138 100 138 108 L 138 116"
+        fill="none" stroke="white" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="128" cy="126" r="4" fill="#7c3aed"/>
+</svg>
