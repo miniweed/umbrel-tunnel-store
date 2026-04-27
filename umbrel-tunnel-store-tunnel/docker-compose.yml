@@ -1,10 +1,6 @@
 networks:
   default:
     name: umbrel-tunnel-store-tunnel_default
-    ipam:
-      driver: default
-      config:
-        - subnet: 10.21.22.0/24
 
 services:
 
@@ -25,9 +21,6 @@ services:
       - WG_API_HOST=wg
     depends_on:
       - wg
-    networks:
-      default:
-        ipv4_address: 10.21.22.2
 
   wg:
     image: ghcr.io/miniweed/umbrel-tunnel-wg:1.0.0@sha256:de7a6405e3b43b11db4425b4f260fae44aa4f39db2224b7020665ec4d08c1043
@@ -40,9 +33,6 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
     volumes:
       - ${APP_DATA_DIR}/data:/data
-    networks:
-      default:
-        ipv4_address: 10.21.22.3
 
   caddy:
     image: caddy:2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d
