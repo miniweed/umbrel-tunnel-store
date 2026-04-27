@@ -2,6 +2,7 @@ manifestVersion: 1
 id: umbrel-tunnel-store-tunnel
 name: Tunnel
 tagline: Expón tu servidor al mundo sin tocar el router
+icon: https://raw.githubusercontent.com/miniweed/umbrel-tunnel-store/main/umbrel-tunnel-store-tunnel/icon.svg
 category: networking
 version: "1.0.0"
 port: 3000
@@ -14,6 +15,7 @@ developer: miniweed
 website: https://github.com/miniweed/umbrel-tunnel-store
 repo: https://github.com/miniweed/umbrel-tunnel-store
 support: https://github.com/miniweed/umbrel-tunnel-store/issues
+gallery: []
 releaseNotes: >-
   Primera versión. WireGuard client + Caddy reverse proxy con Let's Encrypt.
 dependencies: []
