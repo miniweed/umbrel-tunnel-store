@@ -17,7 +17,7 @@ services:
       - WG_API_HOST=wg
 
   wg:
-    image: ghcr.io/miniweed/umbrel-tunnel-wg:1.0.0@sha256:de7a6405e3b43b11db4425b4f260fae44aa4f39db2224b7020665ec4d08c1043
+    image: ghcr.io/miniweed/umbrel-tunnel-wg:1.0.1@sha256:47e1da82de412997ccad4621fbcd3235500a6d7e4426838613ec1abb9805faf9
     restart: on-failure
     stop_grace_period: 30s
     cap_add:

@@ -7,15 +7,7 @@ WG_CONF="/etc/wireguard/wg0.conf"
 
 echo "[wg] Umbrel Tunnel WireGuard client starting..."
 
-# Wait for config to be written by the web container
-until [ -f "$WG_CONF_SRC" ] && [ -s "$WG_CONF_SRC" ]; do
-    echo "[wg] Waiting for WireGuard config at $WG_CONF_SRC..."
-    sleep 3
-done
-
-cp "$WG_CONF_SRC" "$WG_CONF"
-
-# Start API server (keygen + status endpoints)
+# Start API server immediately so keygen works before any config exists
 python3 /wg-api.py &
 API_PID=$!
 
@@ -25,6 +17,14 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
+
+# Wait for config to be written by the web container
+until [ -f "$WG_CONF_SRC" ] && [ -s "$WG_CONF_SRC" ]; do
+    echo "[wg] Waiting for WireGuard config..."
+    sleep 3
+done
+
+cp "$WG_CONF_SRC" "$WG_CONF"
 
 # Bring up WireGuard
 until wg-quick up wg0; do
