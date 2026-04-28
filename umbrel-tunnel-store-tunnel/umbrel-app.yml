@@ -1,8 +1,8 @@
 manifestVersion: 1
-id: miniweed-app-store-tunnel
+id: umbrel-tunnel-store-tunnel
 name: Tunnel
 tagline: Expón tu servidor al mundo sin tocar el router
-icon: https://raw.githubusercontent.com/miniweed/umbrel-app-store/main/miniweed-app-store-tunnel/icon.svg
+icon: https://raw.githubusercontent.com/miniweed/umbrel-app-store/main/umbrel-tunnel-store-tunnel/icon.svg
 category: networking
 version: "1.0.1"
 port: 3000
