@@ -195,4 +195,5 @@ app.get('/api/vps-setup', (req, res) => {
 // ── boot ─────────────────────────────────────────────────────────────────────
 
 ensureDataDir();
-app.listen(3000, () => console.log('[web] Umbrel Tunnel UI en :3000'));
+const PORT = parseInt(process.env.PORT) || 3000;
+app.listen(PORT, () => console.log(`[web] Umbrel Tunnel UI en :${PORT}`));

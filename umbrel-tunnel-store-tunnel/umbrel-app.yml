@@ -5,7 +5,7 @@ tagline: Expón tu servidor al mundo sin tocar el router
 icon: https://raw.githubusercontent.com/miniweed/umbrel-app-store/main/umbrel-tunnel-store-tunnel/icon.svg
 category: networking
 version: "1.0.1"
-port: 3000
+port: 3006
 description: >-
   Conecta tu Umbrel a un VPS propio y expón servicios a internet sin abrir puertos
   en tu router. Alternativa 100% self-hosted a Cloudflare Tunnel. Funciona detrás

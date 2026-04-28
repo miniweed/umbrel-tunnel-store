@@ -3,11 +3,11 @@ services:
   app_proxy:
     environment:
       APP_HOST: umbrel-tunnel-store-tunnel_web_1
-      APP_PORT: 3000
+      APP_PORT: 3006
       PROXY_AUTH_ADD: "true"
 
   web:
-    image: ghcr.io/miniweed/umbrel-tunnel-web:1.0.1@sha256:76c51c283a727e4b0930ba2b2bab02dcb99fd7c1d7fb8c9040a7ce6809201b83
+    image: ghcr.io/miniweed/umbrel-tunnel-web:1.0.2@sha256:6a034507d6630203c5bdc96698f97840d52c83b228ab98a5475530a8e176046f
     restart: on-failure
     stop_grace_period: 30s
     volumes:
@@ -15,6 +15,7 @@ services:
     environment:
       - DATA_DIR=/data
       - WG_API_HOST=wg
+      - PORT=3006
 
   wg:
     image: ghcr.io/miniweed/umbrel-tunnel-wg:1.0.1@sha256:47e1da82de412997ccad4621fbcd3235500a6d7e4426838613ec1abb9805faf9
