@@ -1,10 +1,10 @@
 manifestVersion: 1
-id: umbrel-tunnel-store-tunnel
+id: umbrel-app-store-tunnel
 name: Tunnel
 tagline: Expón tu servidor al mundo sin tocar el router
-icon: https://raw.githubusercontent.com/miniweed/umbrel-tunnel-store/main/umbrel-tunnel-store-tunnel/icon.svg
+icon: https://raw.githubusercontent.com/miniweed/umbrel-app-store/main/umbrel-app-store-tunnel/icon.svg
 category: networking
-version: "1.0.0"
+version: "1.0.1"
 port: 3000
 description: >-
   Conecta tu Umbrel a un VPS propio y expón servicios a internet sin abrir puertos
@@ -12,11 +12,11 @@ description: >-
   de CGNAT. Usa WireGuard para cifrado extremo a extremo y Caddy para HTTPS
   automático con Let's Encrypt.
 developer: miniweed
-website: https://github.com/miniweed/umbrel-tunnel-store
-repo: https://github.com/miniweed/umbrel-tunnel-store
-support: https://github.com/miniweed/umbrel-tunnel-store/issues
+website: https://github.com/miniweed/umbrel-app-store
+repo: https://github.com/miniweed/umbrel-app-store
+support: https://github.com/miniweed/umbrel-app-store/issues
 gallery: []
 releaseNotes: >-
-  Primera versión. WireGuard client + Caddy reverse proxy con Let's Encrypt.
+  Fix: keygen disponible desde el primer arranque.
 dependencies: []
 defaultPassword: ""
