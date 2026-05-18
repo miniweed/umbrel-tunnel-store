@@ -199,4 +199,28 @@ describe('api hardening', () => {
     });
     expect(bySession.status).toBe(200);
   });
+
+  test('accepts OpenSSH ssh-ed25519 public key format', async () => {
+    const { publicKey } = crypto.generateKeyPairSync('ed25519');
+    const der = publicKey.export({ format: 'der', type: 'spki' });
+    const rawKey = der.slice(-32);
+    const type = Buffer.from('ssh-ed25519', 'utf8');
+    const blob = Buffer.concat([
+      Buffer.from([0, 0, 0, type.length]),
+      type,
+      Buffer.from([0, 0, 0, rawKey.length]),
+      rawKey
+    ]);
+    const rawOpenSsh = `ssh-ed25519 ${blob.toString('base64')} openssh-cli@test`;
+    const add = await req(port, 'POST', '/api/auth/pubkeys', JSON.stringify({
+      name: 'openssh-cli',
+      publicKey: rawOpenSsh
+    }), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(add.status).toBe(200);
+    const body = JSON.parse(add.body);
+    expect(body.keyId).toBeTruthy();
+  });
 });

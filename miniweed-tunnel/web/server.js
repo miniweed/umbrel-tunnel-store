@@ -142,6 +142,59 @@ function clearAuthFailures(ip) {
   loginFailures.delete(ip);
 }
 
+function parseEd25519PublicKey(input) {
+  const value = String(input || '').trim();
+  if (!value) return null;
+
+  // 1) Raw DER SPKI in base64
+  try {
+    const keyObject = crypto.createPublicKey({
+      key: Buffer.from(value, 'base64'),
+      format: 'der',
+      type: 'spki'
+    });
+    if (keyObject.asymmetricKeyType === 'ed25519') {
+      return keyObject.export({ format: 'der', type: 'spki' }).toString('base64');
+    }
+  } catch {
+    // Try next format.
+  }
+
+  // 2) OpenSSH format: ssh-ed25519 AAAA... [comment]
+  if (value.startsWith('ssh-ed25519 ')) {
+    const parts = value.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      try {
+        const blob = Buffer.from(parts[1], 'base64');
+        let idx = 0;
+        const readStr = () => {
+          if (idx + 4 > blob.length) throw new Error('short blob');
+          const len = blob.readUInt32BE(idx);
+          idx += 4;
+          if (idx + len > blob.length) throw new Error('short blob');
+          const out = blob.slice(idx, idx + len);
+          idx += len;
+          return out;
+        };
+        const type = readStr().toString('utf8');
+        const rawKey = readStr();
+        if (type !== 'ssh-ed25519' || rawKey.length !== 32) return null;
+        const jwk = {
+          kty: 'OKP',
+          crv: 'Ed25519',
+          x: rawKey.toString('base64url')
+        };
+        const keyObject = crypto.createPublicKey({ key: jwk, format: 'jwk' });
+        return keyObject.export({ format: 'der', type: 'spki' }).toString('base64');
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  return null;
+}
+
 function cleanupAuthChallenges() {
   const now = Date.now();
   for (const [id, challenge] of authChallenges.entries()) {
@@ -1052,14 +1105,13 @@ app.delete('/api/auth/sessions/:id', async (req, res) => {
 
 app.post('/api/auth/pubkeys', async (req, res) => {
   const name = String(req.body?.name || '').trim();
-  const publicKey = String(req.body?.publicKey || '').trim();
-  if (!name || !publicKey) return res.status(400).json({ error: 'name y publicKey requeridos' });
-  let keyObject;
-  try {
-    keyObject = crypto.createPublicKey({ key: Buffer.from(publicKey, 'base64'), format: 'der', type: 'spki' });
-  } catch {
-    return res.status(400).json({ error: 'publicKey inválida (base64 DER SPKI esperado)' });
+  const inputKey = String(req.body?.publicKey || '').trim();
+  if (!name || !inputKey) return res.status(400).json({ error: 'name y publicKey requeridos' });
+  const publicKey = parseEd25519PublicKey(inputKey);
+  if (!publicKey) {
+    return res.status(400).json({ error: 'publicKey inválida (acepta base64 DER SPKI o ssh-ed25519)' });
   }
+  const keyObject = crypto.createPublicKey({ key: Buffer.from(publicKey, 'base64'), format: 'der', type: 'spki' });
   if (keyObject.asymmetricKeyType !== 'ed25519') {
     return res.status(400).json({ error: 'solo se permiten claves ed25519' });
   }
