@@ -42,7 +42,7 @@ const apiRateMax = 120;
 const apiRateStore = new Map();
 const deployJobTtlMs = 60 * 60 * 1000;
 const deployJobMax = 200;
-const SSH_COMMON_FALLBACK_USERS = ['debian', 'ubuntu', 'admin', 'ec2-user'];
+const SSH_COMMON_FALLBACK_USERS = ['debian', 'ubuntu', 'admin', 'ec2-user', 'opc', 'centos', 'rocky', 'almalinux'];
 
 app.set('trust proxy', 1);
 
@@ -616,9 +616,31 @@ function shellSingleQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
-function asPrivilegedShellCommand(sshConfig, command) {
-  if ((sshConfig?.user || '').trim() === 'root') return command;
-  return `sudo -n bash -lc ${shellSingleQuote(command)}`;
+function asPrivilegedShellCommand(command) {
+  const quoted = shellSingleQuote(command);
+  return [
+    'if [ "$(id -u)" -eq 0 ]; then',
+    `  bash -lc ${quoted};`,
+    'elif command -v sudo >/dev/null 2>&1; then',
+    `  sudo -n bash -lc ${quoted};`,
+    'elif command -v doas >/dev/null 2>&1; then',
+    `  doas bash -lc ${quoted};`,
+    'else',
+    '  echo "__MINIWEED_NEED_ROOT_OR_SUDO__";',
+    '  exit 97;',
+    'fi'
+  ].join(' ');
+}
+
+function normalizeDeployError(err) {
+  const combined = `${err?.message || ''}\n${err?.stdout || ''}\n${err?.stderr || ''}`;
+  if (combined.includes('__MINIWEED_NEED_ROOT_OR_SUDO__')) {
+    return 'El usuario SSH no tiene privilegios de administrador. Usa root o un usuario con sudo/doas sin password.';
+  }
+  if (/Timed out while waiting for handshake/i.test(combined)) {
+    return 'Timeout de conexion SSH (handshake). Revisa IP/puerto SSH y firewall del proveedor.';
+  }
+  return `Fallo SSH: ${err?.message || 'error desconocido'}`;
 }
 
 function runRemoteCommand(ssh, command, timeoutMs = 20 * 60 * 1000) {
@@ -664,7 +686,7 @@ function deployScriptOverSsh(sshConfig, script) {
           `bash ${remotePath} > /root/miniweed-tunnel-vps-setup.last.log 2>&1 || (cat /root/miniweed-tunnel-vps-setup.last.log && exit 1)`,
           `cat /root/miniweed-tunnel-vps-setup.last.log`
         ].join(' && ');
-        const cmd = asPrivilegedShellCommand(sshConfig, rawCmd);
+        const cmd = asPrivilegedShellCommand(rawCmd);
 
         const result = await runRemoteCommand(ssh, cmd);
         ssh.end();
@@ -762,7 +784,7 @@ function extractVpsPublicKey(text) {
 }
 
 async function readVpsPublicKeyOverSsh(sshConfig) {
-  const cmd = asPrivilegedShellCommand(sshConfig, 'wg show wg0 public-key');
+  const cmd = asPrivilegedShellCommand('wg show wg0 public-key');
   const result = await runSshCommand(sshConfig, cmd, 30 * 1000);
   const key = (result.stdout || '').trim();
   return isWireGuardKey(key) ? key : '';
@@ -1000,7 +1022,7 @@ app.post('/api/deploy-vps', async (req, res) => {
         status: 'error',
         startedAt: deployJobs.get(jobId)?.startedAt || Date.now(),
         finishedAt: Date.now(),
-        error: `Fallo SSH: ${err.message}`,
+        error: normalizeDeployError(err),
         stdout: err.stdout || '',
         stderr: err.stderr || ''
       });
