@@ -645,6 +645,12 @@ function asPrivilegedShellCommand(command) {
 
 function normalizeDeployError(err) {
   const combined = `${err?.message || ''}\n${err?.stdout || ''}\n${err?.stderr || ''}`;
+  if (/Cannot parse privateKey: Unsupported key format/i.test(combined)) {
+    return 'La clave SSH no es compatible. Usa una clave privada OpenSSH/PEM sin passphrase (recomendado: ed25519 o ecdsa no-sk).';
+  }
+  if (/Encrypted private (OpenSSH )?key detected, but no passphrase given/i.test(combined)) {
+    return 'La clave SSH está cifrada con passphrase y este deploy no la soporta. Usa una clave sin passphrase para el deploy automático.';
+  }
   if (combined.includes('__MINIWEED_NEED_ROOT_OR_SUDO__')) {
     return 'El usuario SSH no tiene privilegios de administrador. Usa root o un usuario con sudo/doas sin password.';
   }
