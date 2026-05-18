@@ -112,3 +112,9 @@ chmod +x miniweed-killswitch.sh
 ```
 
 El script detiene `wg-quick@wg0` y bloquea UDP/51820.
+
+Opcionalmente puedes parametrizar el puerto o archivo de estado:
+
+```bash
+WG_PORT=51820 STATUS_FILE=/tmp/miniweed.status sudo bash miniweed-killswitch.sh
+```

@@ -273,6 +273,10 @@ describe('api hardening', () => {
     expect(body.filename).toBe('miniweed-killswitch.sh');
     expect(body.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(body.script).toContain('wg-quick@wg0');
+    expect(body.script).toContain('must run as root');
+    expect(body.script).toContain('WG_PORT="${WG_PORT:-51820}"');
+    expect(body.script).toContain('iptables -w -C INPUT -p udp --dport "$WG_PORT" -j DROP');
+    expect(body.script).toContain('STATUS_FILE="${STATUS_FILE:-/var/run/miniweed.status}"');
   });
 
   test('returns audit chain verification status', async () => {
