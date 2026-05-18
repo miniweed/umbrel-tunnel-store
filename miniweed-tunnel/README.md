@@ -118,3 +118,11 @@ Opcionalmente puedes parametrizar el puerto o archivo de estado:
 ```bash
 WG_PORT=51820 STATUS_FILE=/tmp/miniweed.status sudo bash miniweed-killswitch.sh
 ```
+
+Instalación opcional como servicio systemd en el VPS (ejecución local, sin API del VPS):
+
+```bash
+sudo install -m 700 miniweed-killswitch.sh /mnt/killswitch.sh
+sudo bash miniweed-tunnel/vps-setup/killswitch-service.sh
+sudo systemctl start miniweed-killswitch.service
+```
