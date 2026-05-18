@@ -42,7 +42,8 @@ const apiRateMax = 120;
 const apiRateStore = new Map();
 const deployJobTtlMs = 60 * 60 * 1000;
 const deployJobMax = 200;
-const SSH_COMMON_FALLBACK_USERS = ['debian', 'ubuntu', 'admin', 'ec2-user', 'opc', 'centos', 'rocky', 'almalinux'];
+const SSH_COMMON_FALLBACK_USERS = ['debian', 'ubuntu'];
+const SSH_MAX_USER_ATTEMPTS = 3;
 
 app.set('trust proxy', 1);
 
@@ -606,10 +607,20 @@ function isSshAuthLikeFailure(text) {
   ].some(snippet => value.includes(snippet));
 }
 
-function buildSshUserCandidates(requestedUser) {
+function buildRetryUserCandidates(requestedUser, suggestedUser = '') {
   const first = (requestedUser || 'root').trim() || 'root';
-  if (first !== 'root') return [first];
-  return [first, ...SSH_COMMON_FALLBACK_USERS].filter((user, idx, arr) => arr.indexOf(user) === idx);
+  const base = [first];
+
+  const suggested = (suggestedUser || '').trim();
+  if (suggested && suggested !== first) base.push(suggested);
+
+  if (first === 'root') {
+    for (const fallbackUser of SSH_COMMON_FALLBACK_USERS) {
+      if (!base.includes(fallbackUser)) base.push(fallbackUser);
+    }
+  }
+
+  return base.slice(0, SSH_MAX_USER_ATTEMPTS);
 }
 
 function shellSingleQuote(value) {
@@ -624,7 +635,7 @@ function asPrivilegedShellCommand(command) {
     'elif command -v sudo >/dev/null 2>&1; then',
     `  sudo -n bash -lc ${quoted};`,
     'elif command -v doas >/dev/null 2>&1; then',
-    `  doas bash -lc ${quoted};`,
+    `  doas -n bash -lc ${quoted};`,
     'else',
     '  echo "__MINIWEED_NEED_ROOT_OR_SUDO__";',
     '  exit 97;',
@@ -715,7 +726,8 @@ function deployScriptOverSsh(sshConfig, script) {
 }
 
 async function deployWithSshUserFallback(sshConfig, script) {
-  const users = buildSshUserCandidates(sshConfig.user);
+  const firstUser = (sshConfig.user || 'root').trim() || 'root';
+  let users = buildRetryUserCandidates(firstUser);
   let lastErr;
   let attemptedUsers = [];
 
@@ -732,15 +744,16 @@ async function deployWithSshUserFallback(sshConfig, script) {
       lastErr = err;
       const combined = `${err?.message || ''}\n${err?.stdout || ''}\n${err?.stderr || ''}`;
       const suggestedUser = extractSuggestedSshUser(combined);
-      if (suggestedUser && !users.includes(suggestedUser)) {
-        users.splice(i + 1, 0, suggestedUser);
+      const isAuthRelated = isSshAuthLikeFailure(combined);
+
+      if (i === 0 && isAuthRelated && suggestedUser) {
+        users = buildRetryUserCandidates(firstUser, suggestedUser);
       }
 
       const hasMoreCandidates = i < users.length - 1;
       if (!hasMoreCandidates) break;
 
-      const canRetryDifferentUser = username === 'root' && isSshAuthLikeFailure(combined);
-      if (!canRetryDifferentUser && !suggestedUser) break;
+      if (!isAuthRelated && !suggestedUser) break;
     }
   }
 

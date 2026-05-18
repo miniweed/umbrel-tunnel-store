@@ -4,7 +4,7 @@ name: Tunnel
 tagline: Expón tu servidor al mundo sin tocar el router
 icon: https://raw.githubusercontent.com/miniweed/umbrel-app-store/main/miniweed-tunnel/icon.png
 category: networking
-version: "1.3.16"
+version: "1.3.17"
 port: 3016
 description: >-
   Conecta tu Umbrel a un VPS propio y expón servicios a internet sin abrir puertos
@@ -17,6 +17,6 @@ repo: https://github.com/miniweed/umbrel-app-store
 support: https://github.com/miniweed/umbrel-app-store/issues
 gallery: []
 releaseNotes: >-
-  Deploy SSH mas automatico entre proveedores: fallback de usuarios ampliado (debian/ubuntu/admin/ec2-user/opc/centos/rocky/almalinux), soporte sudo/doas no interactivo y errores de diagnostico mas claros.
+  Deploy SSH afinado para produccion: fallback corto y controlado de usuarios (root -> sugerido -> debian/ubuntu), soporte sudo/doas no interactivo y mensajes de error mas claros.
 dependencies: []
 defaultPassword: ""
