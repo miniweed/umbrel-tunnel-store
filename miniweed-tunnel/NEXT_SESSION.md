@@ -6,7 +6,7 @@ Last updated: 2026-05-19
 
 - Branch: `main`
 - Working tree at handoff: clean
-- Latest pushed commit: `cefc559`
+- Latest pushed commit: `0a85746`
 
 ## What was completed in this chat
 
@@ -20,6 +20,10 @@ Last updated: 2026-05-19
 6. `19e397a` - Migrate core legacy UI flows into SPA frontend
 7. `bf0053c` - Refine SPA parity with legacy UI behaviors
 8. `cefc559` - Serve SPA as default UI with legacy fallback route
+9. `083a835` - Refresh NEXT_SESSION with SPA-default and contract progress
+10. `bb9ddad` - Release miniweed-tunnel 1.5.0 with SPA default UI
+11. `b59c4d2` - Extend CI with API contract and SPA build checks
+12. `0a85746` - Add failover edge-case integration coverage
 
 ### P4-20 + P4-21 (without provider API)
 
@@ -58,11 +62,19 @@ Last updated: 2026-05-19
 - Added explicit test cleanup for server/timers and quieter test logs.
 - Jest warning about open handles may still appear in normal run, but suites pass.
 
+### Release and CI updates
+
+- Umbrel app released as `1.5.0` with updated web image digest in `docker-compose.yml`.
+- CI now validates API contract snapshot and SPA build in `.github/workflows/ci.yml`.
+- Failover edge-case integration tests added for:
+  - streak/cooldown/recovery behavior
+  - tie-break by lexical name when priorities are equal
+
 ## Validation performed
 
 - `npm run api:contract` in `miniweed-tunnel/web` -> passing.
 - `npm run ui:build` in `miniweed-tunnel/web` -> passing.
-- `npm test -- --runInBand` in `miniweed-tunnel/web` -> passing (18 tests).
+- `npm test -- --runInBand` in `miniweed-tunnel/web` -> passing (20 tests).
 - `python3 -m py_compile miniweed-tunnel/wg-client/wg-api.py` -> passing.
 - `shellcheck` run on critical scripts in prior phase -> passing.
 
@@ -87,9 +99,9 @@ Last updated: 2026-05-19
    - decide removal timeline for legacy route
 2. P3-17 hardening:
    - consume generated `openapi.d.ts` types deeply in SPA client code
-   - optional CI check on `api:spec:check`
+   - tighten CI to regenerate+diff contract (`api:spec` drift guard)
 3. P4-20 hardening pass:
-   - extra failover edge-case tests (flapping/tie-break/recovery)
+   - extend edge-case tests beyond current coverage (manual/auto interplay, disabled-target recovery)
 4. P4-21 hardening pass:
    - deeper CrowdSec bouncer/firewall checks in docs/tests
 5. Test hygiene:
