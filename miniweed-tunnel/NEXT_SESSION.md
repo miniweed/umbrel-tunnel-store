@@ -6,7 +6,7 @@ Last updated: 2026-05-19
 
 - Branch: `main`
 - Working tree at handoff: clean
-- Latest pushed commit: `0a85746`
+- Latest pushed commit: `0d50e3f`
 
 ## What was completed in this chat
 
@@ -24,6 +24,15 @@ Last updated: 2026-05-19
 10. `bb9ddad` - Release miniweed-tunnel 1.5.0 with SPA default UI
 11. `b59c4d2` - Extend CI with API contract and SPA build checks
 12. `0a85746` - Add failover edge-case integration coverage
+13. `408bd46` - Update handoff with release, CI, and failover test progress
+14. `2ec9c15` - Fix SPA asset base path for /app deployment
+15. `9265275` - Release miniweed-tunnel 1.5.1 with SPA base-path fix
+16. `f7f9daf` - Bootstrap persistent app seed when env seed is absent
+17. `1b07551` - Release miniweed-tunnel 1.5.2 with startup seed bootstrap
+18. `044958d` - Avoid fatal boot when API token persistence is unavailable
+19. `2848d69` - Release miniweed-tunnel 1.5.3 with resilient boot fallbacks
+20. `d625462` - Include api-spec files in web image build
+21. `0d50e3f` - Release miniweed-tunnel 1.5.4 with api-spec packaging fix
 
 ### P4-20 + P4-21 (without provider API)
 
@@ -64,17 +73,21 @@ Last updated: 2026-05-19
 
 ### Release and CI updates
 
-- Umbrel app released as `1.5.0` with updated web image digest in `docker-compose.yml`.
+- Umbrel app released iteratively to `1.5.4` with startup and packaging fixes.
 - CI now validates API contract snapshot and SPA build in `.github/workflows/ci.yml`.
 - Failover edge-case integration tests added for:
   - streak/cooldown/recovery behavior
   - tie-break by lexical name when priorities are equal
+- Production install blockers fixed in release train:
+  - SPA asset base path fixed for `/app` deployments.
+  - resilient boot without mandatory env seed/token.
+  - missing `api-spec/` packaging fixed in web image (resolved `Cannot find module './api-spec/schemas'`).
 
 ## Validation performed
 
 - `npm run api:contract` in `miniweed-tunnel/web` -> passing.
 - `npm run ui:build` in `miniweed-tunnel/web` -> passing.
-- `npm test -- --runInBand` in `miniweed-tunnel/web` -> passing (20 tests).
+- `npm test -- --runInBand` in `miniweed-tunnel/web` -> passing (21 tests).
 - `python3 -m py_compile miniweed-tunnel/wg-client/wg-api.py` -> passing.
 - `shellcheck` run on critical scripts in prior phase -> passing.
 
@@ -100,6 +113,7 @@ Last updated: 2026-05-19
 2. P3-17 hardening:
    - consume generated `openapi.d.ts` types deeply in SPA client code
    - tighten CI to regenerate+diff contract (`api:spec` drift guard)
+   - align Docker image copy list with any future runtime imports to prevent packaging regressions
 3. P4-20 hardening pass:
    - extend edge-case tests beyond current coverage (manual/auto interplay, disabled-target recovery)
 4. P4-21 hardening pass:
