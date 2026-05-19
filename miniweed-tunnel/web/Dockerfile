@@ -11,13 +11,11 @@ COPY lib ./lib
 COPY public ./public
 COPY docker-entrypoint.sh ./
 
-RUN addgroup -S mw \
-  && adduser -S -G mw mw \
-  && mkdir -p /data \
-  && chown -R mw:mw /app /data \
+RUN mkdir -p /data \
+  && chown -R node:node /app /data \
   && chmod 755 /app/docker-entrypoint.sh
 
-USER mw
+USER node
 
 EXPOSE 3000
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

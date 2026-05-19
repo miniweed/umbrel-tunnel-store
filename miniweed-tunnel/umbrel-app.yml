@@ -4,7 +4,7 @@ name: Tunnel
 tagline: Expón tu servidor al mundo sin tocar el router
 icon: https://raw.githubusercontent.com/miniweed/umbrel-app-store/main/miniweed-tunnel/icon.png
 category: networking
-version: "1.6.19"
+version: "1.6.20"
 port: 3016
 description: >-
   Conecta tu Umbrel a un VPS propio y expón servicios a internet sin abrir puertos
@@ -17,6 +17,6 @@ repo: https://github.com/miniweed/umbrel-app-store
 support: https://github.com/miniweed/umbrel-app-store/issues
 gallery: []
 releaseNotes: >-
-  Hotfix de permisos entre contenedores: se elimina la dependencia de `/data/wg-ready` y Caddy ahora espera disponibilidad del API interno de WireGuard (`/status`) en vez de archivo compartido, evitando bucles por `Permission denied`. Actualización de imagen `wg` a `1.0.5` y release `1.6.19`.
+  Hotfix de permisos persistentes: el contenedor web se alinea al usuario `node` (UID/GID 1000) para escribir en `${APP_DATA_DIR}/data` de Umbrel sin `EACCES` al guardar config o generar claves. Se mantiene el fix de `wg-ready` de `1.6.19` y se actualiza imagen `web` a `1.6.20`.
 dependencies: []
 defaultPassword: ""
