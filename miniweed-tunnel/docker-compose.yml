@@ -7,12 +7,15 @@ services:
       PROXY_AUTH_ADD: "true"
 
   web:
-    build:
-      context: ./web
+    image: ghcr.io/miniweed/umbrel-tunnel-web:1.5.4@sha256:74bbb0481b49952988312b760a67c7f67ddb6efd27d62a522aacc4dbddbc7b6b
     restart: on-failure
     stop_grace_period: 30s
     volumes:
       - ${APP_DATA_DIR}/data:/data
+      - ./web/server.js:/app/server.js:ro
+      - ./web/api-spec:/app/api-spec:ro
+      - ./web/lib:/app/lib:ro
+      - ./web/public:/app/public:ro
     environment:
       - DATA_DIR=/data
       - WG_API_HOST=wg

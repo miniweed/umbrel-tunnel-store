@@ -26,14 +26,6 @@ const webBlockMatch = compose.match(/(?:^|\n)\s{2}web:\n([\s\S]*?)(?:\n\s{2}[a-z
 if (!webBlockMatch) fail('could not find web service block in docker-compose.yml');
 const webBlock = webBlockMatch[1];
 
-if (!/\s+build:\s*(?:\n\s+context:\s*\.\/web\s*(?:\n|$)|\.\/web\s*(?:\n|$))/.test(webBlock)) {
-  fail('web service must use local build context ./web');
-}
-
-if (/\n\s+image:\s+ghcr\.io\/miniweed\/umbrel-tunnel-web:[^\s]+@sha256:/m.test(webBlock)) {
-  fail('web service image must not be pinned by digest when using local build');
-}
-
 const imageMatch = webBlock.match(/\n\s+image:\s+ghcr\.io\/miniweed\/umbrel-tunnel-web:([^\s]+)\s*(?:\n|$)/m);
 if (imageMatch) {
   const imageVersion = imageMatch[1].trim();

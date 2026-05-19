@@ -4,7 +4,7 @@ name: Tunnel
 tagline: Expón tu servidor al mundo sin tocar el router
 icon: https://raw.githubusercontent.com/miniweed/umbrel-app-store/main/miniweed-tunnel/icon.png
 category: networking
-version: "1.6.6"
+version: "1.6.7"
 port: 3016
 description: >-
   Conecta tu Umbrel a un VPS propio y expón servicios a internet sin abrir puertos
@@ -17,6 +17,6 @@ repo: https://github.com/miniweed/umbrel-app-store
 support: https://github.com/miniweed/umbrel-app-store/issues
 gallery: []
 releaseNotes: >-
-  Hotfix de instalación: se elimina referencia a imagen web no publicada en compose para evitar fallo de install/upgrade. La app usa build local del servicio `web` en Umbrel y mantiene guard CI para impedir volver a fijar imágenes desactualizadas.
+  Hotfix crítico de instalación en Umbrel: se restaura ejecución con imagen web publicada y se monta el código actual del repo en runtime (`server.js`, `api-spec`, `lib`, `public`) para evitar bloqueos al 1% y seguir aplicando fixes recientes sin rebuild remoto.
 dependencies: []
 defaultPassword: ""
