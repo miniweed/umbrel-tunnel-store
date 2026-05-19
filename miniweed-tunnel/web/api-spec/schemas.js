@@ -1,6 +1,8 @@
 const z = require('zod');
 
 const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
+const OptionalWireGuardKeySchema = z.union([z.string().regex(WG_KEY_RE), z.literal('')]).optional();
+const OptionalEmailSchema = z.union([z.string().email(), z.literal('')]).optional();
 
 const ServiceSchema = z.object({
   name: z.string().min(1).max(64),
@@ -14,7 +16,7 @@ const VpsTargetSchema = z.object({
   name: z.string().min(1).max(64).optional(),
   ip: z.string().min(1),
   port: z.number().int().min(1).max(65535).optional(),
-  pubKey: z.string().regex(WG_KEY_RE).optional(),
+  pubKey: OptionalWireGuardKeySchema,
   enabled: z.boolean().optional(),
   priority: z.number().int().min(0).max(99).optional()
 });
@@ -22,11 +24,11 @@ const VpsTargetSchema = z.object({
 const ConfigSchema = z.object({
   vpsIp: z.string().min(1).optional(),
   vpsPort: z.number().int().min(1).max(65535).optional(),
-  vpsPubKey: z.string().regex(WG_KEY_RE).optional(),
+  vpsPubKey: OptionalWireGuardKeySchema,
   vpsTargets: z.array(VpsTargetSchema).max(8).optional(),
   activeVpsId: z.string().min(1).max(64).optional(),
   domain: z.string().optional(),
-  acmeEmail: z.string().email().optional(),
+  acmeEmail: OptionalEmailSchema,
   services: z.array(ServiceSchema).max(64).optional()
 });
 
