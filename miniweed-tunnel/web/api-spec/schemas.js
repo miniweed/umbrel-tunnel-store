@@ -9,9 +9,22 @@ const ServiceSchema = z.object({
   enabled: z.boolean()
 });
 
+const VpsTargetSchema = z.object({
+  id: z.string().min(1).max(64).optional(),
+  name: z.string().min(1).max(64).optional(),
+  ip: z.string().min(1),
+  port: z.number().int().min(1).max(65535).optional(),
+  pubKey: z.string().regex(WG_KEY_RE).optional(),
+  enabled: z.boolean().optional(),
+  priority: z.number().int().min(0).max(99).optional()
+});
+
 const ConfigSchema = z.object({
-  vpsIp: z.string().min(1),
-  vpsPort: z.number().int().min(1).max(65535),
+  vpsIp: z.string().min(1).optional(),
+  vpsPort: z.number().int().min(1).max(65535).optional(),
+  vpsPubKey: z.string().regex(WG_KEY_RE).optional(),
+  vpsTargets: z.array(VpsTargetSchema).max(8).optional(),
+  activeVpsId: z.string().min(1).max(64).optional(),
   domain: z.string().optional(),
   acmeEmail: z.string().email().optional(),
   services: z.array(ServiceSchema).max(64).optional()
@@ -45,6 +58,7 @@ const RotateConfirmSchema = z.object({
 
 module.exports = {
   ServiceSchema,
+  VpsTargetSchema,
   ConfigSchema,
   RotatePrepareSchema,
   RotateConfirmSchema

@@ -336,6 +336,14 @@
         <input type="text" id="vpsPubKey" placeholder="Pega aquí la clave pública del VPS">
         <p id="vps-key-sync" class="text-sm mt-2" style="color:#9ca3af">Sin sincronizar</p>
       </div>
+      <div class="field mt-2">
+        <label>VPS adicionales / failover</label>
+        <div id="vps-targets-list"></div>
+        <div class="btn-row mt-2">
+          <button class="btn btn-secondary btn-sm" onclick="addVpsTarget()">+ Añadir VPS</button>
+        </div>
+        <p class="text-sm mt-2">Ordena por prioridad (menor numero = preferido). Solo VPS habilitados participan en failover.</p>
+      </div>
     </div>
 
     <div class="card">
@@ -422,6 +430,13 @@
       <div id="vps-script-placeholder" class="alert alert-warn">
         Configura la IP del VPS y genera las claves primero.
       </div>
+      <div class="btn-row mt-2">
+        <select id="vps-script-target" onchange="loadVpsScript()"></select>
+        <label class="text-sm" style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="vps-script-crowdsec" onchange="loadVpsScript()">
+          Incluir CrowdSec
+        </label>
+      </div>
       <div id="vps-script-block" class="hidden">
         <div class="code-block" id="vps-script-code"></div>
         <p class="text-sm mt-2">SHA-256 del script: <code id="vps-script-sha">-</code></p>
@@ -456,6 +471,10 @@
         </div>
       </div>
       <p class="text-sm">Pega manualmente la clave pública del VPS tras ejecutar el script.</p>
+      <div class="btn-row mt-2">
+        <button class="btn btn-secondary btn-sm" onclick="triggerAutoFailover()">Failover automatico</button>
+        <button class="btn btn-secondary btn-sm" onclick="switchToSelectedVps()">Cambiar al VPS seleccionado</button>
+      </div>
     </div>
 
   </div>
@@ -465,6 +484,10 @@
 <script>
 let cfg = {};
 const API_TOKEN = __TUNNEL_API_TOKEN__;
+
+function randomId(prefix = 'vps') {
+  return `${prefix}-${Math.random().toString(16).slice(2, 10)}`;
+}
 
 function authHeaders(extra = {}) {
   const headers = { ...extra };
@@ -517,6 +540,11 @@ async function loadConfig() {
     : 'Sin sincronizar';
   document.getElementById('domain').value = cfg.domain || '';
   document.getElementById('acmeEmail').value = cfg.acmeEmail || '';
+
+  cfg.vpsTargets = Array.isArray(cfg.vpsTargets) ? cfg.vpsTargets : [];
+  cfg.activeVpsId = cfg.activeVpsId || (cfg.vpsTargets[0] && cfg.vpsTargets[0].id) || '';
+  renderVpsTargets();
+  renderVpsScriptSelector();
 
   renderServices();
   updateSteps();
@@ -680,6 +708,8 @@ async function saveConfig() {
     vpsIp: document.getElementById('vpsIp').value.trim(),
     vpsPort: parseInt(document.getElementById('vpsPort').value) || 51820,
     vpsPubKey: document.getElementById('vpsPubKey').value.trim(),
+    vpsTargets: collectVpsTargets(),
+    activeVpsId: document.getElementById('vps-script-target')?.value || cfg.activeVpsId || '',
     domain: document.getElementById('domain').value.trim(),
     acmeEmail: document.getElementById('acmeEmail').value.trim(),
     privateKey: '••••',  // server keeps the private key
@@ -708,6 +738,77 @@ async function saveConfig() {
     } catch {}
     setSaveMessage(detail ? `Error: ${detail}` : 'Error al guardar.', '#f87171');
   }
+}
+
+function renderVpsTargets() {
+  const list = document.getElementById('vps-targets-list');
+  if (!list) return;
+  const targets = Array.isArray(cfg.vpsTargets) ? cfg.vpsTargets : [];
+  if (!targets.length) {
+    list.innerHTML = '<p class="text-sm">Sin VPS adicionales</p>';
+    return;
+  }
+  list.innerHTML = targets.map((t, i) => `
+    <div class="service-item" data-vps-id="${esc(t.id || randomId())}">
+      <input class="vps-name" type="text" placeholder="Nombre VPS" value="${esc(t.name || `VPS ${i + 1}`)}">
+      <input class="vps-ip" type="text" placeholder="IP/host" value="${esc(t.ip || '')}">
+      <input class="vps-port" type="number" min="1" max="65535" value="${esc(String(t.port || 51820))}">
+      <input class="vps-priority" type="number" min="0" max="99" value="${esc(String(Number.isFinite(t.priority) ? t.priority : i))}">
+      <label class="toggle"><input type="checkbox" class="vps-enabled" ${t.enabled !== false ? 'checked' : ''}><span class="toggle-slider"></span></label>
+      <button class="btn btn-danger btn-sm" onclick="this.closest('.service-item').remove(); renderVpsScriptSelector();">✕</button>
+      <input class="vps-pub" type="text" placeholder="Clave publica VPS" value="${esc(t.pubKey || '')}" style="grid-column: span 6; margin-top:8px;">
+    </div>
+  `).join('');
+}
+
+function collectVpsTargets() {
+  const rows = [...document.querySelectorAll('#vps-targets-list .service-item')];
+  const values = rows.map((el, i) => ({
+    id: el.getAttribute('data-vps-id') || randomId(),
+    name: el.querySelector('.vps-name')?.value.trim() || `VPS ${i + 1}`,
+    ip: el.querySelector('.vps-ip')?.value.trim() || '',
+    port: parseInt(el.querySelector('.vps-port')?.value, 10) || 51820,
+    pubKey: el.querySelector('.vps-pub')?.value.trim() || '',
+    enabled: Boolean(el.querySelector('.vps-enabled')?.checked),
+    priority: parseInt(el.querySelector('.vps-priority')?.value, 10) || i
+  })).filter(t => t.ip || t.pubKey);
+
+  if (!values.length && (document.getElementById('vpsIp').value.trim() || document.getElementById('vpsPubKey').value.trim())) {
+    values.push({
+      id: 'primary',
+      name: 'VPS principal',
+      ip: document.getElementById('vpsIp').value.trim(),
+      port: parseInt(document.getElementById('vpsPort').value, 10) || 51820,
+      pubKey: document.getElementById('vpsPubKey').value.trim(),
+      enabled: true,
+      priority: 0
+    });
+  }
+  return values;
+}
+
+function addVpsTarget() {
+  cfg.vpsTargets = collectVpsTargets();
+  cfg.vpsTargets.push({
+    id: randomId(),
+    name: `VPS ${cfg.vpsTargets.length + 1}`,
+    ip: '',
+    port: 51820,
+    pubKey: '',
+    enabled: true,
+    priority: cfg.vpsTargets.length
+  });
+  renderVpsTargets();
+  renderVpsScriptSelector();
+}
+
+function renderVpsScriptSelector() {
+  const select = document.getElementById('vps-script-target');
+  if (!select) return;
+  const targets = collectVpsTargets();
+  select.innerHTML = targets.map(t => `<option value="${esc(t.id)}">${esc(t.name)} (${esc(t.ip || 'sin ip')})</option>`).join('');
+  if (cfg.activeVpsId) select.value = cfg.activeVpsId;
+  if (!select.value && targets[0]) select.value = targets[0].id;
 }
 
 // ── Generate WireGuard keys ───────────────────────────────────────────────────
@@ -798,7 +899,12 @@ async function loadVpsScript() {
   const placeholder = document.getElementById('vps-script-placeholder');
   const shaEl = document.getElementById('vps-script-sha');
   try {
-    const res = await apiFetch('/api/vps-setup-script');
+    const selectedId = document.getElementById('vps-script-target')?.value || '';
+    const withCrowdsec = document.getElementById('vps-script-crowdsec')?.checked ? '1' : '0';
+    const qs = new URLSearchParams();
+    if (selectedId) qs.set('vpsId', selectedId);
+    if (withCrowdsec === '1') qs.set('withCrowdsec', '1');
+    const res = await apiFetch(`/api/vps-setup-script${qs.toString() ? `?${qs.toString()}` : ''}`);
     if (!res.ok) { block.classList.add('hidden'); placeholder.classList.remove('hidden'); return; }
     const data = await res.json();
     document.getElementById('vps-script-code').textContent = data.script;
@@ -876,6 +982,37 @@ function updateSteps() {
   setStep(2, hasKeys && hasVpsIp);
   setStep(3, hasKeys && hasVpsIp);
   setStep(4, hasKeys && hasVpsIp && hasVpsPub && hasConfig);
+}
+
+async function triggerAutoFailover() {
+  const res = await apiFetch('/api/vps/failover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    alert(body.error || 'No se pudo ejecutar failover.');
+    return;
+  }
+  alert(body.switched ? `Failover aplicado a ${body.next?.name || body.next?.id}` : 'No fue necesario cambiar VPS.');
+  await loadConfig();
+}
+
+async function switchToSelectedVps() {
+  const targetId = document.getElementById('vps-script-target')?.value || '';
+  if (!targetId) {
+    alert('Selecciona un VPS.');
+    return;
+  }
+  const res = await apiFetch('/api/vps/failover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetId })
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    alert(body.error || 'No se pudo cambiar de VPS.');
+    return;
+  }
+  alert(`VPS activo: ${body.next?.name || body.activeVpsId}`);
+  await loadConfig();
 }
 
 function setStep(n, done) {

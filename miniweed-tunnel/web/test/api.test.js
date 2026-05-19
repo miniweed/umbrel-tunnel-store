@@ -102,6 +102,98 @@ describe('api hardening', () => {
     const body = JSON.parse(r.body);
     expect(typeof body.script).toBe('string');
     expect(body.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(body.vps).toBeTruthy();
+    expect(body.vps.ip).toBe('1.2.3.4');
+  });
+
+  test('supports multi-vps config and manual failover switch', async () => {
+    const payload = JSON.stringify({
+      vpsTargets: [
+        {
+          id: 'vps-a',
+          name: 'VPS A',
+          ip: '10.10.10.10',
+          port: 51820,
+          pubKey: 'A'.repeat(43) + '=',
+          enabled: true,
+          priority: 1
+        },
+        {
+          id: 'vps-b',
+          name: 'VPS B',
+          ip: '11.11.11.11',
+          port: 51821,
+          pubKey: 'B'.repeat(43) + '=',
+          enabled: true,
+          priority: 0
+        }
+      ],
+      activeVpsId: 'vps-a',
+      domain: 'example.com',
+      acmeEmail: 'ops@example.com',
+      privateKey: 'C'.repeat(43) + '=',
+      publicKey: 'D'.repeat(43) + '=',
+      services: []
+    });
+    const saved = await req(port, 'POST', '/api/config', payload, {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(saved.status).toBe(200);
+
+    const switchRes = await req(port, 'POST', '/api/vps/failover', JSON.stringify({ targetId: 'vps-b' }), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(switchRes.status).toBe(200);
+    const switched = JSON.parse(switchRes.body);
+    expect(switched.ok).toBe(true);
+    expect(switched.activeVpsId).toBe('vps-b');
+
+    const cfgRes = await req(port, 'GET', '/api/config', null, {
+      'x-tunnel-api-token': token
+    });
+    expect(cfgRes.status).toBe(200);
+    const cfgBody = JSON.parse(cfgRes.body);
+    expect(Array.isArray(cfgBody.vpsTargets)).toBe(true);
+    expect(cfgBody.activeVpsId).toBe('vps-b');
+    expect(cfgBody.vpsIp).toBe('11.11.11.11');
+  });
+
+  test('can request setup script with crowdsec for specific vps', async () => {
+    const payload = JSON.stringify({
+      vpsTargets: [
+        {
+          id: 'vps-c',
+          name: 'VPS C',
+          ip: '12.12.12.12',
+          port: 51820,
+          pubKey: 'A'.repeat(43) + '=',
+          enabled: true,
+          priority: 0
+        }
+      ],
+      activeVpsId: 'vps-c',
+      domain: 'example.com',
+      acmeEmail: 'ops@example.com',
+      privateKey: 'A'.repeat(43) + '=',
+      publicKey: 'B'.repeat(43) + '=',
+      services: []
+    });
+    const saved = await req(port, 'POST', '/api/config', payload, {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(saved.status).toBe(200);
+
+    const r = await req(port, 'GET', '/api/vps-setup-script?vpsId=vps-c&withCrowdsec=1', null, {
+      'x-tunnel-api-token': token
+    });
+    expect(r.status).toBe(200);
+    const body = JSON.parse(r.body);
+    expect(body.withCrowdsec).toBe(true);
+    expect(body.script).toContain('Instalando CrowdSec');
+    expect(body.vps.id).toBe('vps-c');
   });
 
   test('health refresh endpoint works', async () => {

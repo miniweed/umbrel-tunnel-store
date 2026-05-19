@@ -126,3 +126,44 @@ sudo install -m 700 miniweed-killswitch.sh /mnt/killswitch.sh
 sudo bash miniweed-tunnel/vps-setup/killswitch-service.sh
 sudo systemctl start miniweed-killswitch.service
 ```
+
+## Multi-VPS / failover
+
+El backend soporta varios VPS en paralelo con un VPS activo para WireGuard.
+
+- `vpsTargets[]`: lista de VPS candidatos (`id`, `name`, `ip`, `port`, `pubKey`, `enabled`, `priority`).
+- `activeVpsId`: VPS actualmente activo (endpoint WireGuard usado en `wg0.conf`).
+- Failover automatico: selecciona el VPS saludable con menor prioridad si el activo falla.
+- Failover manual: permite forzar cambio desde API/UI.
+
+### Obtener estado de targets
+
+```bash
+curl -sS "$API_URL/api/vps/targets" \
+  -H "x-tunnel-api-token: $API_TOKEN"
+```
+
+### Forzar failover manual
+
+```bash
+curl -sS -X POST "$API_URL/api/vps/failover" \
+  -H "Content-Type: application/json" \
+  -H "x-tunnel-api-token: $API_TOKEN" \
+  -d '{"targetId":"vps-b"}'
+```
+
+### Trigger de failover automatico
+
+```bash
+curl -sS -X POST "$API_URL/api/vps/failover" \
+  -H "Content-Type: application/json" \
+  -H "x-tunnel-api-token: $API_TOKEN" \
+  -d '{}'
+```
+
+### Script de setup por VPS + CrowdSec opcional
+
+```bash
+curl -sS "$API_URL/api/vps-setup-script?vpsId=vps-b&withCrowdsec=1" \
+  -H "x-tunnel-api-token: $API_TOKEN"
+```

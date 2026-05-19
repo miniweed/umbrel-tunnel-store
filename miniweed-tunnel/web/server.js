@@ -17,6 +17,7 @@ const WG_API_PORT = 8080;
 let API_AUTH_TOKEN = '';
 let configLock = Promise.resolve();
 const MAX_SERVICES = 64;
+const MAX_VPS_TARGETS = 8;
 
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const WG_CONF = path.join(DATA_DIR, 'wg0.conf');
@@ -40,6 +41,8 @@ const DEFAULT_CONFIG = {
   vpsIp: '',
   vpsPort: 51820,
   vpsPubKey: '',
+  vpsTargets: [],
+  activeVpsId: '',
   tunnelClientIp: '10.8.0.2',
   tunnelServerIp: '10.8.0.1',
   domain: '',
@@ -407,9 +410,13 @@ function loadConfig() {
   try {
     const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
     const dec = decryptConfig(raw);
-    return { ...DEFAULT_CONFIG, ...dec };
+    const cfg = { ...DEFAULT_CONFIG, ...dec };
+    ensureVpsTargets(cfg);
+    return cfg;
   } catch {
-    return { ...DEFAULT_CONFIG };
+    const cfg = { ...DEFAULT_CONFIG };
+    ensureVpsTargets(cfg);
+    return cfg;
   }
 }
 
@@ -418,6 +425,70 @@ function saveConfig(cfg) {
   const tmp = CONFIG_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(encryptConfig(cfg), null, 2), { mode: 0o600 });
   fs.renameSync(tmp, CONFIG_FILE);
+}
+
+function normalizeVpsTarget(raw, index = 0) {
+  const idRaw = String(raw?.id || '').trim();
+  const id = idRaw || crypto.createHash('sha256').update(`${Date.now()}-${Math.random()}-${index}`).digest('hex').slice(0, 16);
+  const name = String(raw?.name || '').trim() || `VPS ${index + 1}`;
+  const ip = String(raw?.ip || '').trim();
+  const portRaw = parseInt(raw?.port, 10);
+  const port = Number.isFinite(portRaw) ? portRaw : 51820;
+  const pubKey = String(raw?.pubKey || '').trim();
+  const enabled = raw?.enabled !== false;
+  const priorityRaw = parseInt(raw?.priority, 10);
+  const priority = Number.isFinite(priorityRaw) ? priorityRaw : index;
+  const lastHealth = raw?.lastHealth && typeof raw.lastHealth === 'object'
+    ? {
+        ok: Boolean(raw.lastHealth.ok),
+        checkedAt: String(raw.lastHealth.checkedAt || ''),
+        message: String(raw.lastHealth.message || ''),
+        latencyMs: Number.isFinite(raw.lastHealth.latencyMs) ? raw.lastHealth.latencyMs : null
+      }
+    : null;
+  return { id, name, ip, port, pubKey, enabled, priority, lastHealth };
+}
+
+function ensureVpsTargets(cfg) {
+  const targets = [];
+  if (Array.isArray(cfg.vpsTargets)) {
+    for (const [i, raw] of cfg.vpsTargets.entries()) {
+      const t = normalizeVpsTarget(raw, i);
+      if (!t.ip && !t.pubKey) continue;
+      targets.push(t);
+    }
+  }
+
+  if (!targets.length && (cfg.vpsIp || cfg.vpsPubKey)) {
+    targets.push(normalizeVpsTarget({
+      id: 'primary',
+      name: 'VPS principal',
+      ip: cfg.vpsIp,
+      port: cfg.vpsPort,
+      pubKey: cfg.vpsPubKey,
+      enabled: true,
+      priority: 0
+    }, 0));
+  }
+
+  cfg.vpsTargets = targets.slice(0, MAX_VPS_TARGETS);
+  const preferred = String(cfg.activeVpsId || '').trim();
+  const active = cfg.vpsTargets.find(t => t.id === preferred)
+    || cfg.vpsTargets.find(t => t.enabled && t.ip)
+    || cfg.vpsTargets[0]
+    || null;
+  cfg.activeVpsId = active ? active.id : '';
+
+  if (active) {
+    cfg.vpsIp = active.ip;
+    cfg.vpsPort = active.port;
+    cfg.vpsPubKey = active.pubKey;
+  }
+}
+
+function getActiveVpsTarget(cfg) {
+  ensureVpsTargets(cfg);
+  return cfg.vpsTargets.find(t => t.id === cfg.activeVpsId) || null;
 }
 
 function isWireGuardKey(value) {
@@ -547,6 +618,105 @@ function probeServiceTarget(target, timeoutMs = 4000) {
   });
 }
 
+function probeVpsTarget(target, timeoutMs = 1500) {
+  return new Promise(resolve => {
+    try {
+      if (!target || !target.ip) {
+        return resolve({ ok: false, message: 'sin ip' });
+      }
+      const started = Date.now();
+      const req = http.request(
+        {
+          protocol: 'http:',
+          hostname: target.ip,
+          port: 80,
+          path: '/',
+          method: 'GET',
+          timeout: timeoutMs
+        },
+        res => {
+          res.resume();
+          resolve({
+            ok: true,
+            message: `http ${res.statusCode || 0}`,
+            latencyMs: Date.now() - started
+          });
+        }
+      );
+      req.on('timeout', () => req.destroy(new Error('timeout')));
+      req.on('error', err => resolve({ ok: false, message: err.message }));
+      req.end();
+    } catch (err) {
+      resolve({ ok: false, message: err.message });
+    }
+  });
+}
+
+async function computeVpsHealth(targets) {
+  const out = {};
+  await Promise.all((targets || []).map(async target => {
+    if (!target?.id) return;
+    if (!target.enabled) {
+      out[target.id] = {
+        ok: false,
+        checked: false,
+        checkedAt: new Date().toISOString(),
+        message: 'Desactivado'
+      };
+      return;
+    }
+    const probe = await probeVpsTarget(target);
+    out[target.id] = {
+      ok: Boolean(probe.ok),
+      checked: true,
+      checkedAt: new Date().toISOString(),
+      message: probe.message || (probe.ok ? 'ok' : 'sin respuesta'),
+      latencyMs: Number.isFinite(probe.latencyMs) ? probe.latencyMs : null
+    };
+  }));
+  return out;
+}
+
+function pickBestFailoverTarget(cfg, vpsHealth) {
+  ensureVpsTargets(cfg);
+  const candidates = (cfg.vpsTargets || []).filter(t => t.enabled && t.ip && t.pubKey);
+  if (!candidates.length) return null;
+  const activeId = cfg.activeVpsId;
+  const activeHealth = activeId ? vpsHealth[activeId] : null;
+  if (activeHealth?.ok) return null;
+
+  const healthy = candidates
+    .filter(t => vpsHealth[t.id]?.ok)
+    .sort((a, b) => (a.priority - b.priority) || a.name.localeCompare(b.name));
+  if (!healthy.length) return null;
+  const next = healthy[0];
+  if (next.id === activeId) return null;
+  return next;
+}
+
+async function maybeFailover(cfg, reason = 'auto') {
+  const vpsHealth = await computeVpsHealth(cfg.vpsTargets || []);
+  const next = pickBestFailoverTarget(cfg, vpsHealth);
+  let switched = false;
+
+  if (next) {
+    cfg.activeVpsId = next.id;
+    ensureVpsTargets(cfg);
+    saveConfig(cfg);
+    const wgConf = generateWgConf(cfg);
+    if (wgConf) fs.writeFileSync(WG_CONF, wgConf);
+    switched = true;
+    audit.log({
+      action: 'vps.failover',
+      reason,
+      to: next.id,
+      toIp: next.ip
+    });
+  }
+
+  return { switched, next: next ? { id: next.id, name: next.name, ip: next.ip } : null, vpsHealth };
+}
+
 async function checkServicesHealth(services) {
   const health = {};
   await Promise.all((services || []).map(async svc => {
@@ -577,15 +747,36 @@ async function checkServicesHealth(services) {
 
 function validateConfig(cfg) {
   const errors = [];
+  ensureVpsTargets(cfg);
 
-   if ((cfg.services || []).length > MAX_SERVICES) {
+  if ((cfg.services || []).length > MAX_SERVICES) {
     errors.push(`Demasiados servicios: máximo ${MAX_SERVICES}`);
   }
 
-  if (cfg.vpsPort < 1 || cfg.vpsPort > 65535) errors.push('El puerto WireGuard debe estar entre 1 y 65535');
   if (cfg.privateKey && !isWireGuardKey(cfg.privateKey)) errors.push('La clave privada de Umbrel no es válida');
   if (cfg.publicKey && !isWireGuardKey(cfg.publicKey)) errors.push('La clave pública de Umbrel no es válida');
-  if (cfg.vpsPubKey && !isWireGuardKey(cfg.vpsPubKey)) errors.push('La clave pública del VPS no es válida');
+
+  if ((cfg.vpsTargets || []).length > MAX_VPS_TARGETS) {
+    errors.push(`Demasiados VPS configurados: máximo ${MAX_VPS_TARGETS}`);
+  }
+
+  for (const [index, target] of (cfg.vpsTargets || []).entries()) {
+    const label = target.name || `VPS ${index + 1}`;
+    if (target.port < 1 || target.port > 65535) {
+      errors.push(`El puerto WireGuard de ${label} debe estar entre 1 y 65535`);
+    }
+    if (target.pubKey && !isWireGuardKey(target.pubKey)) {
+      errors.push(`La clave pública de ${label} no es válida`);
+    }
+    if (target.ip && !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(target.ip) && !isHostname(target.ip)) {
+      errors.push(`La IP/host de ${label} no es válida`);
+    }
+  }
+
+  if (!(cfg.vpsTargets || []).some(t => t.enabled && t.ip)) {
+    errors.push('Configura al menos un VPS habilitado con IP/host');
+  }
+
   if (cfg.domain && !isHostname(cfg.domain)) errors.push('El dominio principal no es válido');
   if (!isEmail(cfg.acmeEmail)) errors.push('El email de Let\'s Encrypt no es válido');
 
@@ -607,7 +798,8 @@ function validateConfig(cfg) {
 }
 
 function generateWgConf(cfg) {
-  if (!cfg.privateKey || !cfg.vpsPubKey || !cfg.vpsIp) return null;
+  const active = getActiveVpsTarget(cfg);
+  if (!cfg.privateKey || !active?.pubKey || !active?.ip) return null;
   const pskLine = cfg.presharedKey ? `PresharedKey = ${cfg.presharedKey}` : null;
   return [
     '[Interface]',
@@ -615,9 +807,9 @@ function generateWgConf(cfg) {
     `PrivateKey = ${cfg.privateKey}`,
     '',
     '[Peer]',
-    `PublicKey = ${cfg.vpsPubKey}`,
+    `PublicKey = ${active.pubKey}`,
     pskLine,
-    `Endpoint = ${cfg.vpsIp}:${cfg.vpsPort}`,
+    `Endpoint = ${active.ip}:${active.port}`,
     `AllowedIPs = ${cfg.tunnelServerIp}/32`,
     'PersistentKeepalive = 25',
     ''
@@ -636,9 +828,23 @@ function generateCaddyfile(cfg) {
   return blocks.join('\n');
 }
 
-function generateVpsScript(cfg) {
+function generateVpsScript(cfg, target, options = {}) {
+  const selected = target || getActiveVpsTarget(cfg);
+  if (!selected) throw new Error('No hay VPS seleccionado');
+  const withCrowdsec = Boolean(options.withCrowdsec);
   const pskLine = cfg.presharedKey
     ? `PresharedKey = ${cfg.presharedKey}`
+    : '';
+  const crowdsecBlock = withCrowdsec
+    ? `
+# CrowdSec opcional
+echo "Instalando CrowdSec..."
+curl -s https://install.crowdsec.net | sh
+apt-get -o DPkg::Lock::Timeout=300 install -y -qq crowdsec crowdsec-firewall-bouncer-iptables
+cscli collections install crowdsecurity/sshd || true
+systemctl enable crowdsec crowdsec-firewall-bouncer >/dev/null 2>&1 || true
+systemctl restart crowdsec crowdsec-firewall-bouncer >/dev/null 2>&1 || true
+`
     : '';
   return `#!/bin/bash
 # Umbrel Tunnel — VPS Setup
@@ -683,7 +889,7 @@ if ! ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:)\${SSH_PORT}$"; the
   exit 1
 fi
 
-WG_PORT=${cfg.vpsPort}
+WG_PORT=${selected.port}
 WG_CLIENT_IP=${cfg.tunnelClientIp}
 
 mkdir -p /root/miniweed-backups
@@ -772,6 +978,7 @@ systemctl restart fail2ban >/dev/null 2>&1 || true
 # Actualizaciones de seguridad automáticas
 systemctl enable unattended-upgrades >/dev/null 2>&1 || true
 systemctl restart unattended-upgrades >/dev/null 2>&1 || true
+${crowdsecBlock}
 
 # Endurecer SSH a solo clave publica (sin romper acceso)
 SSH_HARDENED="no"
@@ -802,7 +1009,7 @@ VPS_PUB=$(echo "$VPS_PRIV" | wg pubkey)
 cat > /etc/wireguard/wg0.conf <<WGEOF
 [Interface]
 Address = ${cfg.tunnelServerIp}/24
-ListenPort = ${cfg.vpsPort}
+ListenPort = ${selected.port}
 PrivateKey = $VPS_PRIV
 
 [Peer]
@@ -883,7 +1090,9 @@ echo "[killswitch] completed"
 `;
 }
 
-function buildVpsRotateScript(cfg, next) {
+function buildVpsRotateScript(cfg, next, target) {
+  const selected = target || getActiveVpsTarget(cfg);
+  if (!selected) throw new Error('No hay VPS activo para rotación');
   const pskLine = next.presharedKey ? `PresharedKey = ${next.presharedKey}` : '';
   return `#!/usr/bin/env bash
 set -euo pipefail
@@ -906,7 +1115,7 @@ cp /etc/wireguard/wg0.conf "$BACKUP"
 cat > "$NEW_CONF_FILE" <<'WGEOF'
 [Interface]
 Address = ${cfg.tunnelServerIp}/24
-ListenPort = ${cfg.vpsPort}
+ListenPort = ${selected.port}
 PrivateKey = __KEEP_EXISTING_VPS_PRIVATE_KEY__
 
 [Peer]
@@ -978,8 +1187,17 @@ async function computeHealth(cfg) {
 async function refreshHealthSnapshot() {
   try {
     const cfg = loadConfig();
+    const failover = await maybeFailover(cfg, 'health-refresh');
     const health = await computeHealth(cfg);
-    fs.writeFileSync(HEALTH_FILE, JSON.stringify(health, null, 2));
+    fs.writeFileSync(HEALTH_FILE, JSON.stringify({
+      services: health,
+      vps: failover.vpsHealth,
+      failover: {
+        switched: failover.switched,
+        next: failover.next,
+        activeVpsId: cfg.activeVpsId || ''
+      }
+    }, null, 2));
   } catch {
     // best effort background task
   }
@@ -1069,16 +1287,23 @@ function wgApi(urlPath) {
 
 app.get('/api/config', (req, res) => {
   const cfg = loadConfig();
+  const active = getActiveVpsTarget(cfg);
   // Never expose private key to the frontend
   const auth = cfg.auth || { passwordHash: '', sessions: [] };
   res.json({
     ...cfg,
+    vpsIp: active?.ip || '',
+    vpsPort: active?.port || 51820,
+    vpsPubKey: active?.pubKey || '',
+    vpsTargets: cfg.vpsTargets || [],
+    activeVpsId: cfg.activeVpsId || '',
     auth: {
       passwordEnabled: Boolean(auth.passwordHash),
       sessionCount: Array.isArray(auth.sessions) ? auth.sessions.length : 0
     },
     privateKey: cfg.privateKey ? '••••' : '',
-    vpsPubKeyFingerprint: keyFingerprint(cfg.vpsPubKey)
+    vpsPubKeyFingerprint: keyFingerprint(active?.pubKey || ''),
+    vpsFingerprints: Object.fromEntries((cfg.vpsTargets || []).map(t => [t.id, keyFingerprint(t.pubKey)]))
   });
 });
 
@@ -1090,7 +1315,28 @@ app.post('/api/config', validateBody(ConfigSchema.partial().passthrough()), asyn
       if (update.privateKey === '••••') update.privateKey = existing.privateKey;
 
       const cfg = { ...existing, ...update };
-      cfg.vpsPort = parseInt(cfg.vpsPort, 10) || 51820;
+      const updateTargets = Array.isArray(update.vpsTargets)
+        ? update.vpsTargets.map((raw, i) => normalizeVpsTarget(raw, i))
+        : null;
+      if (updateTargets) {
+        cfg.vpsTargets = updateTargets.slice(0, MAX_VPS_TARGETS);
+      } else if (update.vpsIp || update.vpsPubKey || update.vpsPort || existing.vpsTargets.length === 0) {
+        const preserved = existing.vpsTargets.filter(t => t.id !== (existing.activeVpsId || ''));
+        const legacyTarget = normalizeVpsTarget({
+          id: existing.activeVpsId || 'primary',
+          name: existing.vpsTargets.find(t => t.id === existing.activeVpsId)?.name || 'VPS principal',
+          ip: update.vpsIp ?? existing.vpsIp,
+          port: update.vpsPort ?? existing.vpsPort,
+          pubKey: update.vpsPubKey ?? existing.vpsPubKey,
+          enabled: true,
+          priority: 0
+        }, 0);
+        cfg.vpsTargets = [legacyTarget, ...preserved].slice(0, MAX_VPS_TARGETS);
+      }
+      if (typeof update.activeVpsId === 'string') {
+        cfg.activeVpsId = update.activeVpsId.trim();
+      }
+      ensureVpsTargets(cfg);
       cfg.services = Array.isArray(cfg.services)
         ? cfg.services.map(svc => ({
             name: (svc.name || '').trim(),
@@ -1387,6 +1633,41 @@ app.post('/api/health/refresh', async (req, res) => {
   }
 });
 
+app.post('/api/vps/failover', async (req, res) => {
+  const requestedId = String(req.body?.targetId || '').trim();
+  const cfg = loadConfig();
+  ensureVpsTargets(cfg);
+  if (!requestedId) {
+    const result = await maybeFailover(cfg, 'manual-auto');
+    return res.json({ ok: true, ...result, activeVpsId: loadConfig().activeVpsId || '' });
+  }
+  const target = (cfg.vpsTargets || []).find(t => t.id === requestedId && t.enabled && t.ip && t.pubKey);
+  if (!target) {
+    return res.status(404).json({ error: 'VPS objetivo no encontrado o incompleto' });
+  }
+  cfg.activeVpsId = target.id;
+  ensureVpsTargets(cfg);
+  saveConfig(cfg);
+  const wgConf = generateWgConf(cfg);
+  if (wgConf) fs.writeFileSync(WG_CONF, wgConf);
+  audit.log({ action: 'vps.failover.manual', ip: req.ip, to: target.id, toIp: target.ip });
+  return res.json({ ok: true, switched: true, next: { id: target.id, name: target.name, ip: target.ip }, activeVpsId: cfg.activeVpsId });
+});
+
+app.get('/api/vps/targets', async (req, res) => {
+  const cfg = loadConfig();
+  ensureVpsTargets(cfg);
+  const vpsHealth = await computeVpsHealth(cfg.vpsTargets || []);
+  res.json({
+    activeVpsId: cfg.activeVpsId || '',
+    targets: (cfg.vpsTargets || []).map(t => ({
+      ...t,
+      fingerprint: keyFingerprint(t.pubKey),
+      health: vpsHealth[t.id] || null
+    }))
+  });
+});
+
 app.post('/api/backup', (req, res) => {
   const passphrase = String(req.body?.passphrase || '');
   const includeAudit = req.body?.includeAudit !== false;
@@ -1440,19 +1721,30 @@ app.post('/api/restore', express.raw({ type: 'application/octet-stream', limit: 
 
 app.get('/api/vps-setup-script', (req, res) => {
   const cfg = loadConfig();
-  if (!cfg.publicKey || !cfg.vpsIp) {
+  const targetId = String(req.query.vpsId || '').trim();
+  const selected = targetId
+    ? (cfg.vpsTargets || []).find(t => t.id === targetId)
+    : getActiveVpsTarget(cfg);
+  if (!cfg.publicKey || !selected?.ip) {
     return res.status(400).json({ error: 'Configura la IP del VPS y genera las claves primero' });
   }
-  const script = generateVpsScript(cfg);
+  const withCrowdsec = String(req.query.withCrowdsec || '').trim() === '1';
+  const script = generateVpsScript(cfg, selected, { withCrowdsec });
   const sha256 = crypto.createHash('sha256').update(script).digest('hex');
   if (req.query.format === 'plain') {
-    audit.log({ action: 'script.download', format: 'plain', ip: req.ip });
+    audit.log({ action: 'script.download', format: 'plain', ip: req.ip, vpsId: selected.id, withCrowdsec });
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="miniweed-tunnel-vps-setup.sh"');
     return res.send(script);
   }
-  audit.log({ action: 'script.download', format: 'json', ip: req.ip });
-  return res.json({ script, sha256, filename: 'miniweed-tunnel-vps-setup.sh' });
+  audit.log({ action: 'script.download', format: 'json', ip: req.ip, vpsId: selected.id, withCrowdsec });
+  return res.json({
+    script,
+    sha256,
+    filename: 'miniweed-tunnel-vps-setup.sh',
+    vps: { id: selected.id, name: selected.name, ip: selected.ip, port: selected.port },
+    withCrowdsec
+  });
 });
 
 app.get('/api/audit', (req, res) => {
@@ -1678,7 +1970,8 @@ app.get('/api/kill-switch/script', (req, res) => {
 
 app.post('/api/rotate/prepare', validateBody(RotatePrepareSchema), async (req, res) => {
   const cfg = loadConfig();
-  if (!cfg.vpsIp || !cfg.publicKey || !cfg.privateKey) {
+  const active = getActiveVpsTarget(cfg);
+  if (!active?.ip || !active?.pubKey || !cfg.publicKey || !cfg.privateKey) {
     return res.status(400).json({ error: 'Configuración incompleta para rotación' });
   }
   try {
@@ -1706,7 +1999,7 @@ app.post('/api/rotate/prepare', validateBody(RotatePrepareSchema), async (req, r
       publicKey: keys.publicKey,
       presharedKey: keys.presharedKey || cfg.presharedKey || ''
     };
-    const script = buildVpsRotateScript(cfg, next);
+    const script = buildVpsRotateScript(cfg, next, active);
     rotationPlans.set(planId, {
       id: planId,
       createdAt: now,
@@ -1718,7 +2011,8 @@ app.post('/api/rotate/prepare', validateBody(RotatePrepareSchema), async (req, r
       },
       next,
       script,
-      scriptSha256: crypto.createHash('sha256').update(script).digest('hex')
+      scriptSha256: crypto.createHash('sha256').update(script).digest('hex'),
+      target: { id: active.id, name: active.name, ip: active.ip }
     });
     audit.log({ action: 'key.rotate.prepare', ip: req.ip, planId, nextFingerprint: keyFingerprint(next.publicKey) });
     return res.json({
@@ -1728,7 +2022,8 @@ app.post('/api/rotate/prepare', validateBody(RotatePrepareSchema), async (req, r
       nextPublicKey: next.publicKey,
       nextPublicKeyFingerprint: keyFingerprint(next.publicKey),
       script,
-      scriptSha256: crypto.createHash('sha256').update(script).digest('hex')
+      scriptSha256: crypto.createHash('sha256').update(script).digest('hex'),
+      target: { id: active.id, name: active.name, ip: active.ip }
     });
   } catch (err) {
     return res.status(503).json({ error: `No se pudo preparar rotación: ${err.message}` });
