@@ -4,6 +4,7 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [preact()],
+  base: '/app/',
   build: {
     outDir: resolve(__dirname, '../public/app'),
     emptyOutDir: true
