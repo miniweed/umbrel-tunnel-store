@@ -4,6 +4,9 @@ const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
 const OptionalWireGuardKeySchema = z.union([z.string().regex(WG_KEY_RE), z.literal('')]).optional();
 const OptionalEmailSchema = z.union([z.string().email(), z.literal('')]).optional();
 const OptionalStringOrEmptySchema = z.union([z.string().min(1), z.literal('')]).optional();
+const OptionalServiceNameSchema = z.union([z.string().min(1).max(64), z.literal('')]).optional();
+const OptionalSubdomainSchema = z.union([z.string().regex(/^[a-z0-9-]{1,63}$/), z.literal('')]).optional();
+const OptionalTargetSchema = z.union([z.string().regex(/^https?:\/\/[^\/\?#]+$/), z.literal('')]).optional();
 const FailoverPolicySchema = z.object({
   activeFailuresRequired: z.number().int().min(1).max(10).optional(),
   candidateSuccessesRequired: z.number().int().min(1).max(10).optional(),
@@ -11,16 +14,16 @@ const FailoverPolicySchema = z.object({
 });
 
 const ServiceSchema = z.object({
-  name: z.string().min(1).max(64),
-  subdomain: z.string().regex(/^[a-z0-9-]{1,63}$/),
-  target: z.string().regex(/^https?:\/\/[^\/\?#]+$/),
-  enabled: z.boolean()
+  name: OptionalServiceNameSchema,
+  subdomain: OptionalSubdomainSchema,
+  target: OptionalTargetSchema,
+  enabled: z.boolean().optional()
 });
 
 const VpsTargetSchema = z.object({
   id: z.string().min(1).max(64).optional(),
   name: z.string().min(1).max(64).optional(),
-  ip: z.string().min(1),
+  ip: OptionalStringOrEmptySchema,
   port: z.number().int().min(1).max(65535).optional(),
   pubKey: OptionalWireGuardKeySchema,
   enabled: z.boolean().optional(),
