@@ -535,6 +535,154 @@ describe('api hardening', () => {
     expect(body.next.name).toBe('Alpha');
   });
 
+  test('manual switch and later auto failover recovery interoperate correctly', async () => {
+    setNetMock(
+      {
+        '10.2.0.1:22': 'ok',
+        '10.2.0.1:443': 'ok',
+        '10.2.0.2:22': 'ok',
+        '10.2.0.2:443': 'ok'
+      }
+    );
+
+    const payload = JSON.stringify({
+      vpsTargets: [
+        {
+          id: 'vps-a',
+          name: 'VPS A',
+          ip: '10.2.0.1',
+          port: 51820,
+          pubKey: 'A'.repeat(43) + '=',
+          enabled: true,
+          priority: 0
+        },
+        {
+          id: 'vps-b',
+          name: 'VPS B',
+          ip: '10.2.0.2',
+          port: 51820,
+          pubKey: 'B'.repeat(43) + '=',
+          enabled: true,
+          priority: 1
+        }
+      ],
+      activeVpsId: 'vps-a',
+      domain: 'example.com',
+      acmeEmail: 'ops@example.com',
+      privateKey: 'C'.repeat(43) + '=',
+      publicKey: 'D'.repeat(43) + '=',
+      services: []
+    });
+    const saved = await req(port, 'POST', '/api/config', payload, {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(saved.status).toBe(200);
+
+    const manual = await req(port, 'POST', '/api/vps/failover', JSON.stringify({ targetId: 'vps-b' }), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(manual.status).toBe(200);
+    const manualBody = JSON.parse(manual.body);
+    expect(manualBody.switched).toBe(true);
+    expect(manualBody.activeVpsId).toBe('vps-b');
+
+    setNetMock(
+      {
+        '10.2.0.1:22': 'ok',
+        '10.2.0.1:443': 'ok',
+        '10.2.0.2:22': 'fail',
+        '10.2.0.2:443': 'fail'
+      }
+    );
+
+    const auto1 = await req(port, 'POST', '/api/vps/failover', JSON.stringify({}), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(auto1.status).toBe(200);
+    expect(JSON.parse(auto1.body).switched).toBe(false);
+
+    const auto2 = await req(port, 'POST', '/api/vps/failover', JSON.stringify({}), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(auto2.status).toBe(200);
+    const autoBody = JSON.parse(auto2.body);
+    expect(autoBody.switched).toBe(true);
+    expect(autoBody.activeVpsId).toBe('vps-a');
+  });
+
+  test('auto failover recovers when current active target is incomplete', async () => {
+    setNetMock(
+      {
+        '10.3.0.1:22': 'fail',
+        '10.3.0.1:443': 'fail',
+        '10.3.0.2:22': 'fail',
+        '10.3.0.2:443': 'fail'
+      }
+    );
+
+    const payload = JSON.stringify({
+      vpsTargets: [
+        {
+          id: 'vps-incomplete',
+          name: 'VPS Incomplete',
+          ip: '10.3.0.1',
+          port: 51820,
+          enabled: true,
+          priority: 0
+        },
+        {
+          id: 'vps-ok',
+          name: 'VPS OK',
+          ip: '10.3.0.2',
+          port: 51820,
+          pubKey: 'B'.repeat(43) + '=',
+          enabled: true,
+          priority: 1
+        }
+      ],
+      activeVpsId: 'vps-incomplete',
+      domain: 'example.com',
+      acmeEmail: 'ops@example.com',
+      privateKey: 'C'.repeat(43) + '=',
+      publicKey: 'D'.repeat(43) + '=',
+      services: []
+    });
+    const saved = await req(port, 'POST', '/api/config', payload, {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(saved.status).toBe(200);
+
+    setNetMock(
+      {
+        '10.3.0.1:22': 'fail',
+        '10.3.0.1:443': 'fail',
+        '10.3.0.2:22': 'ok',
+        '10.3.0.2:443': 'ok'
+      }
+    );
+
+    const auto1 = await req(port, 'POST', '/api/vps/failover', JSON.stringify({}), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(auto1.status).toBe(200);
+    expect(JSON.parse(auto1.body).switched).toBe(false);
+
+    const auto2 = await req(port, 'POST', '/api/vps/failover', JSON.stringify({}), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(auto2.status).toBe(200);
+    const body = JSON.parse(auto2.body);
+    expect(body.switched).toBe(true);
+    expect(body.activeVpsId).toBe('vps-ok');
+  });
+
   test('health refresh endpoint works', async () => {
     const r = await req(port, 'POST', '/api/health/refresh', null, {
       'x-tunnel-api-token': token
