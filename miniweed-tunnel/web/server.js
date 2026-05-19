@@ -92,6 +92,11 @@ const rateBuckets = {
   '/api/rotate/confirm': { max: 5, windowMs: 300_000 }
 };
 const apiRateStore = new Map();
+let rateGc = null;
+let challengeGc = null;
+let rotationGc = null;
+let healthTimer = null;
+let runningServers = 0;
 
 app.set('trust proxy', 1);
 
@@ -244,12 +249,39 @@ function cleanupApiRateStore() {
   }
 }
 
-const rateGc = setInterval(cleanupApiRateStore, 60 * 1000);
-if (typeof rateGc.unref === 'function') rateGc.unref();
-const challengeGc = setInterval(cleanupAuthChallenges, 60 * 1000);
-if (typeof challengeGc.unref === 'function') challengeGc.unref();
-const rotationGc = setInterval(cleanupRotationPlans, 60 * 1000);
-if (typeof rotationGc.unref === 'function') rotationGc.unref();
+function ensureBackgroundTimers() {
+  if (!rateGc) {
+    rateGc = setInterval(cleanupApiRateStore, 60 * 1000);
+    if (typeof rateGc.unref === 'function') rateGc.unref();
+  }
+  if (!challengeGc) {
+    challengeGc = setInterval(cleanupAuthChallenges, 60 * 1000);
+    if (typeof challengeGc.unref === 'function') challengeGc.unref();
+  }
+  if (!rotationGc) {
+    rotationGc = setInterval(cleanupRotationPlans, 60 * 1000);
+    if (typeof rotationGc.unref === 'function') rotationGc.unref();
+  }
+}
+
+function stopBackgroundTimers() {
+  if (rateGc) {
+    clearInterval(rateGc);
+    rateGc = null;
+  }
+  if (challengeGc) {
+    clearInterval(challengeGc);
+    challengeGc = null;
+  }
+  if (rotationGc) {
+    clearInterval(rotationGc);
+    rotationGc = null;
+  }
+  if (healthTimer) {
+    clearInterval(healthTimer);
+    healthTimer = null;
+  }
+}
 
 function apiRateLimit(req, res, next) {
   const bucketName = rateBuckets[req.path] ? req.path : 'default';
@@ -2316,10 +2348,9 @@ app.get('/api/rotate/:planId', (req, res) => {
 
 // ── boot ─────────────────────────────────────────────────────────────────────
 
-let healthTimer = null;
-
 function startServer() {
   ensureDataDir();
+  ensureBackgroundTimers();
   API_AUTH_TOKEN = loadOrCreateApiToken();
   migrateConfigIfNeeded();
   refreshHealthSnapshot();
@@ -2335,6 +2366,14 @@ function startServer() {
     const actualPort = server.address() && server.address().port ? server.address().port : PORT;
     console.log(`[web] Umbrel Tunnel UI en :${actualPort}`);
   });
+  server.keepAliveTimeout = 0;
+  runningServers += 1;
+  server.on('close', () => {
+    runningServers = Math.max(0, runningServers - 1);
+    if (runningServers === 0) {
+      stopBackgroundTimers();
+    }
+  });
   return server;
 }
 
@@ -2345,6 +2384,7 @@ if (require.main === module) {
 module.exports = {
   app,
   startServer,
+  stopBackgroundTimers,
   _internals: {
     keyFingerprint,
     validateEmailWithMx,

@@ -21,7 +21,7 @@ async function startAppServer(tempDir) {
   const server = mod.startServer();
   await new Promise(resolve => server.on('listening', resolve));
   const port = server.address().port;
-  return { server, port };
+  return { server, port, stopBackgroundTimers: mod.stopBackgroundTimers };
 }
 
 function req(port, method, pathname, body = null, headers = {}) {
@@ -31,7 +31,11 @@ function req(port, method, pathname, body = null, headers = {}) {
       port,
       path: pathname,
       method,
-      headers
+      agent: false,
+      headers: {
+        Connection: 'close',
+        ...headers
+      }
     };
     const client = require('http').request(options, res => {
       let data = '';
@@ -55,12 +59,16 @@ describe('api hardening', () => {
   let server;
   let port;
   let token;
+  let stopBackgroundTimers;
+  let logSpy;
 
   beforeEach(async () => {
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'miniweed-web-'));
     const started = await startAppServer(tmpDir);
     server = started.server;
     port = started.port;
+    stopBackgroundTimers = started.stopBackgroundTimers;
     token = Buffer.from(require('crypto').hkdfSync(
       'sha256',
       Buffer.from(process.env.APP_SEED, 'utf8'),
@@ -71,7 +79,11 @@ describe('api hardening', () => {
   });
 
   afterEach(done => {
-    server.close(done);
+    server.close(() => {
+      if (typeof stopBackgroundTimers === 'function') stopBackgroundTimers();
+      if (logSpy) logSpy.mockRestore();
+      done();
+    });
   });
 
   test('rejects unauthorized api call', async () => {
