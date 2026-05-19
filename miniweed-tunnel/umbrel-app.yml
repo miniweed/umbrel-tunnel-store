@@ -4,7 +4,7 @@ name: Tunnel
 tagline: Expón tu servidor al mundo sin tocar el router
 icon: https://raw.githubusercontent.com/miniweed/umbrel-app-store/main/miniweed-tunnel/icon.png
 category: networking
-version: "1.6.20"
+version: "1.6.21"
 port: 3016
 description: >-
   Conecta tu Umbrel a un VPS propio y expón servicios a internet sin abrir puertos
@@ -17,6 +17,6 @@ repo: https://github.com/miniweed/umbrel-app-store
 support: https://github.com/miniweed/umbrel-app-store/issues
 gallery: []
 releaseNotes: >-
-  Hotfix de permisos persistentes: el contenedor web se alinea al usuario `node` (UID/GID 1000) para escribir en `${APP_DATA_DIR}/data` de Umbrel sin `EACCES` al guardar config o generar claves. Se mantiene el fix de `wg-ready` de `1.6.19` y se actualiza imagen `web` a `1.6.20`.
+  Hotfix de compatibilidad de permisos en bind-mount de Umbrel: el contenedor `web` vuelve a ejecutarse como root (manteniendo `cap_drop: [ALL]` y `no-new-privileges`) para evitar `EACCES` al escribir `config.json.tmp` en `/data` durante guardado y generación de claves. Actualización de imagen `web` a `1.6.21`.
 dependencies: []
 defaultPassword: ""

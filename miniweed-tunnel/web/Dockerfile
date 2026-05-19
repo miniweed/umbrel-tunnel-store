@@ -15,7 +15,5 @@ RUN mkdir -p /data \
   && chown -R node:node /app /data \
   && chmod 755 /app/docker-entrypoint.sh
 
-USER node
-
 EXPOSE 3000
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
