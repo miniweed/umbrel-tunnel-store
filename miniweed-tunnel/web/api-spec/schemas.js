@@ -3,6 +3,7 @@ const z = require('zod');
 const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
 const OptionalWireGuardKeySchema = z.union([z.string().regex(WG_KEY_RE), z.literal('')]).optional();
 const OptionalEmailSchema = z.union([z.string().email(), z.literal('')]).optional();
+const OptionalStringOrEmptySchema = z.union([z.string().min(1), z.literal('')]).optional();
 const FailoverPolicySchema = z.object({
   activeFailuresRequired: z.number().int().min(1).max(10).optional(),
   candidateSuccessesRequired: z.number().int().min(1).max(10).optional(),
@@ -27,11 +28,11 @@ const VpsTargetSchema = z.object({
 });
 
 const ConfigSchema = z.object({
-  vpsIp: z.string().min(1).optional(),
+  vpsIp: OptionalStringOrEmptySchema,
   vpsPort: z.number().int().min(1).max(65535).optional(),
   vpsPubKey: OptionalWireGuardKeySchema,
   vpsTargets: z.array(VpsTargetSchema).max(8).optional(),
-  activeVpsId: z.string().min(1).max(64).optional(),
+  activeVpsId: z.union([z.string().min(1).max(64), z.literal('')]).optional(),
   domain: z.string().optional(),
   acmeEmail: OptionalEmailSchema,
   failoverPolicy: FailoverPolicySchema.optional(),
