@@ -1541,7 +1541,10 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-app.post('/api/config', validateBody(ConfigSchema.partial().passthrough()), async (req, res) => {
+app.post('/api/config', async (req, res) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'validation', issues: [{ path: [], message: 'body must be an object' }] });
+  }
   try {
     const result = await withConfigLock(async () => {
       const existing = loadConfig();

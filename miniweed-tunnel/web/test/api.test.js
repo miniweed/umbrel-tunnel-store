@@ -712,6 +712,27 @@ describe('api hardening', () => {
     expect(r.status).toBe(400);
   });
 
+  test('accepts minimal progressive setup payload and returns validation details for malformed body', async () => {
+    const minimal = await req(port, 'POST', '/api/config', JSON.stringify({
+      vpsIp: '1.2.3.4',
+      domain: 'example.com',
+      acmeEmail: 'ops@example.com'
+    }), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(minimal.status).toBe(200);
+
+    const malformed = await req(port, 'POST', '/api/config', JSON.stringify([]), {
+      'Content-Type': 'application/json',
+      'x-tunnel-api-token': token
+    });
+    expect(malformed.status).toBe(400);
+    const malformedBody = JSON.parse(malformed.body);
+    expect(malformedBody.error).toBe('validation');
+    expect(Array.isArray(malformedBody.issues)).toBe(true);
+  });
+
   test('can set and use UI password session login', async () => {
     const setPwd = await req(port, 'POST', '/api/auth/password', JSON.stringify({ password: 'S3gura__pass__123' }), {
       'Content-Type': 'application/json',
