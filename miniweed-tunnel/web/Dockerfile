@@ -6,6 +6,7 @@ COPY package.json ./
 RUN npm install --production
 
 COPY server.js ./
+COPY api-spec ./api-spec
 COPY lib ./lib
 COPY public ./public
 
