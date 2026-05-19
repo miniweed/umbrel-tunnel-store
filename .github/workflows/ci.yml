@@ -44,6 +44,14 @@ jobs:
         run: npm test
         working-directory: miniweed-tunnel/web
 
+      - name: Validate API contract snapshot
+        run: npm run api:spec:check
+        working-directory: miniweed-tunnel/web
+
+      - name: Build SPA bundle
+        run: npm ci && npm run build
+        working-directory: miniweed-tunnel/web/ui
+
   validate-wg-api:
     runs-on: ubuntu-latest
     needs: lint-web
